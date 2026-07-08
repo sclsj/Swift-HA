@@ -1,0 +1,230 @@
+import NativeHACore
+import SwiftUI
+
+enum EntityRowKind: Equatable {
+    case simple
+    case sensor
+    case toggle
+    case button
+}
+
+struct EntityRowView: View {
+    let row: LovelaceEntityRowConfig
+    let displayContext: EntityDisplayContext
+    var inheritedStateColor: Bool?
+    var onMoreInfo: (EntityID) -> Void = { _ in }
+    var onServiceCall: (HAServiceCall) -> Void = { _ in }
+
+    var body: some View {
+        let model = EntityRowModel(row: row)
+
+        if model.entityID.isEmpty {
+            EntityNotFoundWarningRow(entityID: nil)
+        } else if let stateObj = displayContext.states[model.entityID] {
+            rowContent(model: model, stateObj: stateObj)
+        } else {
+            EntityNotFoundWarningRow(entityID: model.entityID)
+        }
+    }
+
+    @ViewBuilder
+    private func rowContent(model: EntityRowModel, stateObj: HassEntity) -> some View {
+        HStack(spacing: 10) {
+            if model.showIcon {
+                LovelaceIconView(
+                    entityID: stateObj.entityID,
+                    icon: model.icon,
+                    color: iconColor(for: stateObj, model: model)
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                if model.showName {
+                    Text(displayContext.displayName(for: stateObj, overrideName: model.name))
+                        .font(.subheadline)
+                        .lineLimit(1)
+                }
+                if let secondary = secondaryInfo(model: model, stateObj: stateObj) {
+                    Text(secondary)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            trailingContent(model: model, stateObj: stateObj)
+        }
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            performTap(model: model, stateObj: stateObj)
+        }
+    }
+
+    @ViewBuilder
+    private func trailingContent(model: EntityRowModel, stateObj: HassEntity) -> some View {
+        switch Self.kind(for: model, stateObj: stateObj) {
+        case .button:
+            Button("Press") {
+                onServiceCall(HAServiceCall(
+                    domain: "button",
+                    service: "press",
+                    serviceData: ["entity_id": .string(stateObj.entityID)]
+                ))
+            }
+            .buttonStyle(.borderless)
+            .disabled(stateObj.state == HAStateValue.unavailable)
+        case .toggle:
+            if Self.shouldShowToggle(for: stateObj) {
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { stateObj.state == "on" },
+                        set: { turnOn in
+                            onServiceCall(LovelaceActionResolver.serviceCallForTurnOnOff(
+                                entityID: stateObj.entityID,
+                                turnOn: turnOn
+                            ))
+                        }
+                    )
+                )
+                .labelsHidden()
+                .disabled(stateObj.state == HAStateValue.unavailable)
+            } else {
+                stateText(stateObj)
+            }
+        case .simple, .sensor:
+            stateText(stateObj)
+        }
+    }
+
+    private func stateText(_ stateObj: HassEntity) -> some View {
+        Text(displayContext.stateDisplay(for: stateObj))
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+            .multilineTextAlignment(.trailing)
+            .lineLimit(2)
+    }
+
+    private func performTap(model: EntityRowModel, stateObj: HassEntity) {
+        CardActionDispatcher(
+            entityID: stateObj.entityID,
+            states: displayContext.states,
+            onMoreInfo: onMoreInfo,
+            onServiceCall: onServiceCall
+        )
+        .perform(
+            tapAction: model.tapAction,
+            holdAction: model.holdAction,
+            doubleTapAction: model.doubleTapAction
+        )
+    }
+
+    private func secondaryInfo(model: EntityRowModel, stateObj: HassEntity) -> String? {
+        guard let secondaryInfo = model.secondaryInfo else {
+            return nil
+        }
+
+        switch secondaryInfo {
+        case "entity-id":
+            return stateObj.entityID
+        case "last-changed":
+            return displayContext.stateContentDisplay("last_changed", for: stateObj)
+        case "last-updated":
+            return displayContext.stateContentDisplay("last_updated", for: stateObj)
+        default:
+            return nil
+        }
+    }
+
+    private func iconColor(for stateObj: HassEntity, model: EntityRowModel) -> Color? {
+        let shouldColor = model.stateColor ?? inheritedStateColor ?? false
+        guard shouldColor, let stateColor = HAStateColorResolver.color(for: stateObj) else {
+            return nil
+        }
+        return Color(haHex: stateColor.hex)
+    }
+
+    static func kind(for row: LovelaceEntityRowConfig) -> EntityRowKind {
+        let model = EntityRowModel(row: row)
+        return kind(for: model, stateObj: nil)
+    }
+
+    static func kind(for model: EntityRowModel, stateObj: HassEntity?) -> EntityRowKind {
+        if let explicit = model.type {
+            switch explicit {
+            case "button":
+                return .button
+            case "toggle":
+                return .toggle
+            case "sensor":
+                return .sensor
+            case "simple-entity", "entity":
+                return .simple
+            default:
+                break
+            }
+        }
+
+        let domain = EntityIDParser.domain(from: stateObj?.entityID ?? model.entityID)
+        switch domain {
+        case "button":
+            return .button
+        case "fan", "switch":
+            return .toggle
+        case "sensor":
+            return .sensor
+        default:
+            return .simple
+        }
+    }
+
+    static func shouldShowToggle(for stateObj: HassEntity) -> Bool {
+        ["on", "off", HAStateValue.unknown, HAStateValue.unavailable].contains(stateObj.state)
+    }
+}
+
+struct EntityRowModel: Equatable {
+    var entityID: EntityID
+    var name: String?
+    var icon: String?
+    var type: String?
+    var secondaryInfo: String?
+    var stateColor: Bool?
+    var showName: Bool
+    var showIcon: Bool
+    var tapAction: LovelaceActionConfig?
+    var holdAction: LovelaceActionConfig?
+    var doubleTapAction: LovelaceActionConfig?
+
+    init(row: LovelaceEntityRowConfig) {
+        switch row {
+        case let .entity(entityID):
+            self.entityID = entityID
+            self.name = nil
+            self.icon = nil
+            self.type = nil
+            self.secondaryInfo = nil
+            self.stateColor = nil
+            self.showName = true
+            self.showIcon = true
+            self.tapAction = nil
+            self.holdAction = nil
+            self.doubleTapAction = nil
+        case let .config(config):
+            self.entityID = config.entity
+            self.name = config.name
+            self.icon = config.icon
+            self.type = config.type
+            self.secondaryInfo = config.secondaryInfo
+            self.stateColor = config.stateColor
+            self.showName = config.showName ?? true
+            self.showIcon = config.showIcon ?? true
+            self.tapAction = config.tapAction
+            self.holdAction = config.holdAction
+            self.doubleTapAction = config.doubleTapAction
+        }
+    }
+}
