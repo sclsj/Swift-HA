@@ -8,6 +8,7 @@ final class AppScaffoldTests: XCTestCase {
         XCTAssertEqual(AppRoute.dashboardPath(""), "/lovelace")
     }
 
+    @MainActor
     func testAppStateTracksDashboardSelectionFromRoutes() {
         let state = AppState(environment: .test)
 
@@ -19,6 +20,7 @@ final class AppScaffoldTests: XCTestCase {
         XCTAssertEqual(state.selectedDashboardPath, "/lovelace")
     }
 
+    @MainActor
     func testMoreInfoPresentationUsesEntityRoute() {
         let state = AppState(environment: .test)
 

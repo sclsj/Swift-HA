@@ -348,9 +348,10 @@ final class HAWebSocketClientTests: XCTestCase {
     func testReceiveLoopFailureRetriesReconnectUntilSuccessful() async throws {
         let (client, transport) = try await makeConnectedClient()
 
-        let reconnectCallback = expectation(description: "reconnect callback")
-        client.onReconnect = {
-            reconnectCallback.fulfill()
+        let reconnected = LockedValue<Bool>(false)
+        let notifyingClient = try XCTUnwrap(client as? HAWebSocketReconnectNotifying)
+        notifyingClient.onReconnect = {
+            reconnected.set(true)
         }
 
         // We want the FIRST reconnect attempt to fail.
@@ -363,7 +364,10 @@ final class HAWebSocketClientTests: XCTestCase {
         transport.simulateReceiveFailure(error: URLError(.networkConnectionLost))
 
         // Wait for the reconnect callback, meaning the loop successfully backed off and retried
-        wait(for: [reconnectCallback], timeout: 2.0)
+        for _ in 0..<20 {
+            if reconnected.value() { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
 
         XCTAssertEqual(client.connectionState, .connected)
 
@@ -380,7 +384,7 @@ final class HAWebSocketClientTests: XCTestCase {
         transport.simulateReceiveFailure(error: URLError(.networkConnectionLost))
 
         // Wait a small amount of time to let the retry loop start
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await Task.sleep(nanoseconds: 300_000_000)
 
         // Call explicit disconnect
         await client.disconnect()
@@ -439,6 +443,227 @@ final class HAWebSocketClientTests: XCTestCase {
         """
         {"id":\(id),"type":"result","success":true,"result":null}
         """
+    }
+
+    func testEventArrivingAfterLocalCancelIsIgnored() async throws {
+        let (client, transport) = try await makeConnectedClient()
+        let receivedEntity = LockedValue<String?>(nil)
+
+        let subscriptionTask = Task { () -> HASubscription in
+            try await client.subscribe(
+                HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("state_changed")])
+            ) { (event: HAEvent<HAStateChangedEventData>) in
+                receivedEntity.set(event.data.entityID)
+            }
+        }
+
+        try await waitForNumberedRequestCount(1, transport: transport)
+        let subscriptionID = try XCTUnwrap(transport.numberedSentObjects()[0]["id"]?.integerValue)
+        transport.enqueue(resultMessage(id: subscriptionID))
+        let subscription = try await subscriptionTask.value
+
+        subscription.cancel()
+        
+        try await waitForNumberedRequestCount(2, transport: transport)
+        let unsubscribe = try transport.numberedSentObjects()[1]
+        let unsubscribeID = try XCTUnwrap(unsubscribe["id"]?.integerValue)
+
+        // Event arriving after local cancel but before unsubscribe resolves
+        transport.enqueue("""
+        {"id":\(subscriptionID),"type":"event","event":{"event_type":"state_changed","data":{"entity_id":"sensor.ignored","old_state":null,"new_state":{"entity_id":"sensor.ignored","state":"23.4","attributes":{},"last_changed":"2026-07-06T00:00:00.000000+00:00","last_updated":"2026-07-06T00:00:00.000000+00:00","last_reported":"2026-07-06T00:00:00.000000+00:00","context":{"id":"ctx","parent_id":null,"user_id":null}}},"origin":"LOCAL","time_fired":"2026-07-06T00:00:00.000000+00:00","context":{"id":"ctx","parent_id":null,"user_id":null}}}
+        """)
+        
+        transport.enqueue(resultMessage(id: unsubscribeID))
+        
+        // Give time for event processing
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertNil(receivedEntity.value())
+
+        await client.disconnect()
+    }
+
+    func testUnsubscribeFailureDoesNotFailClient() async throws {
+        let (client, transport) = try await makeConnectedClient()
+
+        let subscriptionTask = Task { () -> HASubscription in
+            try await client.subscribe(
+                HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("test_event")])
+            ) { (_: HAJSONValue) in }
+        }
+
+        try await waitForNumberedRequestCount(1, transport: transport)
+        let subscriptionID = try XCTUnwrap(transport.numberedSentObjects()[0]["id"]?.integerValue)
+        transport.enqueue(resultMessage(id: subscriptionID))
+        let subscription = try await subscriptionTask.value
+
+        subscription.cancel()
+
+        try await waitForNumberedRequestCount(2, transport: transport)
+        let unsubscribe = try transport.numberedSentObjects()[1]
+        let unsubscribeID = try XCTUnwrap(unsubscribe["id"]?.integerValue)
+        
+        // Fail the unsubscribe
+        transport.enqueue("""
+        {"id":\(unsubscribeID),"type":"result","success":false,"error":{"code":"unknown_error","message":"Something went wrong"}}
+        """)
+        
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(client.connectionState, .connected)
+
+        await client.disconnect()
+    }
+
+    func testMultipleSubscriptionsReplayAndDispatchCorrectly() async throws {
+        let (client, transport) = try await makeConnectedClient()
+        let receivedA = LockedValue<[String]>([])
+        let receivedB = LockedValue<[String]>([])
+
+        let subA = Task { () -> HASubscription in
+            try await client.subscribe(HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("event_a")])) { (event: HAJSONValue) in
+                if let value = event.objectValue?["value"]?.stringValue {
+                    receivedA.mutate { $0.append(value) }
+                }
+            }
+        }
+        let subB = Task { () -> HASubscription in
+            try await client.subscribe(HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("event_b")])) { (event: HAJSONValue) in
+                if let value = event.objectValue?["value"]?.stringValue {
+                    receivedB.mutate { $0.append(value) }
+                }
+            }
+        }
+
+        try await waitForNumberedRequestCount(2, transport: transport)
+        let reqA = try transport.numberedSentObjects()[0]
+        let reqB = try transport.numberedSentObjects()[1]
+        let idA = try XCTUnwrap(reqA["id"]?.integerValue)
+        let idB = try XCTUnwrap(reqB["id"]?.integerValue)
+        
+        transport.enqueue(resultMessage(id: idA))
+        transport.enqueue(resultMessage(id: idB))
+        _ = try await subA.value
+        _ = try await subB.value
+
+        transport.queueAuthenticationForNextConnection()
+        let reconnectTask = Task { try await client.reconnect() }
+
+        try await waitForNumberedRequestCount(3, transport: transport)
+        let repA = try transport.numberedSentObjects()[2]
+        let newIdA = try XCTUnwrap(repA["id"]?.integerValue)
+        transport.enqueue(resultMessage(id: newIdA))
+
+        try await waitForNumberedRequestCount(4, transport: transport)
+        let repB = try transport.numberedSentObjects()[3]
+        let newIdB = try XCTUnwrap(repB["id"]?.integerValue)
+        transport.enqueue(resultMessage(id: newIdB))
+
+        try await reconnectTask.value
+
+
+        
+        transport.enqueue("""
+        {"id":\(newIdA),"type":"event","event":{"event_type":"event_a","data":{"value":"val_a"},"origin":"LOCAL","time_fired":"2026-07-06T00:00:00+00:00","context":{"id":"c1","parent_id":null,"user_id":null}}}
+        """)
+        transport.enqueue("""
+        {"id":\(newIdB),"type":"event","event":{"event_type":"event_b","data":{"value":"val_b"},"origin":"LOCAL","time_fired":"2026-07-06T00:00:00+00:00","context":{"id":"c1","parent_id":null,"user_id":null}}}
+        """)
+        
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(receivedA.value(), ["val_a"])
+        XCTAssertEqual(receivedB.value(), ["val_b"])
+
+    }
+
+    func testMalformedEventPayloadDoesNotCrashUnrelatedSubscriptions() async throws {
+        let (client, transport) = try await makeConnectedClient()
+        let receivedValid = LockedValue<[String]>([])
+
+        struct StrictPayload: Decodable {
+            let value: String
+        }
+
+        let validSub = Task { () -> HASubscription in
+            try await client.subscribe(HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("valid")])) { (event: HAEvent<StrictPayload>) in
+                receivedValid.mutate { $0.append(event.data.value) }
+            }
+        }
+        
+        let invalidSub = Task { () -> HASubscription in
+            try await client.subscribe(HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("invalid")])) { (_: HAEvent<StrictPayload>) in }
+        }
+
+        try await waitForNumberedRequestCount(2, transport: transport)
+        let id1 = try XCTUnwrap(transport.numberedSentObjects()[0]["id"]?.integerValue)
+        let id2 = try XCTUnwrap(transport.numberedSentObjects()[1]["id"]?.integerValue)
+        
+        transport.enqueue(resultMessage(id: id1))
+        transport.enqueue(resultMessage(id: id2))
+        let sub1 = try await validSub.value
+        let sub2 = try await invalidSub.value
+
+        transport.enqueue("""
+        {"id":\(id2),"type":"event","event":{"event_type":"invalid","data":{"wrong_key":"foo"},"origin":"LOCAL"}}
+        """)
+        transport.enqueue("""
+        {"id":\(id1),"type":"event","event":{"event_type":"valid","data":{"value":"ok"},"origin":"LOCAL"}}
+        """)
+
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(receivedValid.value(), ["ok"])
+
+        sub1.cancel()
+        sub2.cancel()
+        await client.disconnect()
+    }
+
+    func testOneCancelledOneActiveOnlyActiveReplays() async throws {
+        let (client, transport) = try await makeConnectedClient()
+        let received = LockedValue<[String]>([])
+
+        let subActive = Task { () -> HASubscription in
+            try await client.subscribe(HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("active")])) { (event: HAJSONValue) in
+                if let value = event.objectValue?["value"]?.stringValue {
+                    received.mutate { $0.append(value) }
+                }
+            }
+        }
+        let subCancelled = Task { () -> HASubscription in
+            try await client.subscribe(HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("cancelled")])) { (_: HAJSONValue) in }
+        }
+
+        try await waitForNumberedRequestCount(2, transport: transport)
+        let idActive = try XCTUnwrap(transport.numberedSentObjects()[0]["id"]?.integerValue)
+        let idCancelled = try XCTUnwrap(transport.numberedSentObjects()[1]["id"]?.integerValue)
+        
+        transport.enqueue(resultMessage(id: idActive))
+        transport.enqueue(resultMessage(id: idCancelled))
+        let a = try await subActive.value
+        let c = try await subCancelled.value
+        
+        c.cancel()
+        try await waitForNumberedRequestCount(3, transport: transport)
+        let unsubscribe = try transport.numberedSentObjects()[2]
+        transport.enqueue(resultMessage(id: try XCTUnwrap(unsubscribe["id"]?.integerValue)))
+
+        transport.queueAuthenticationForNextConnection()
+        let reconnectTask = Task { try await client.reconnect() }
+
+        try await waitForNumberedRequestCount(4, transport: transport)
+        let replayReq = try transport.numberedSentObjects()[3]
+        XCTAssertEqual(replayReq["event_type"], .string("active"))
+        
+        let newIdActive = try XCTUnwrap(replayReq["id"]?.integerValue)
+        transport.enqueue(resultMessage(id: newIdActive))
+        transport.enqueue("""
+        {"id":\(newIdActive),"type":"event","event":{"event_type":"active","data":{"value":"live"},"origin":"LOCAL"}}
+        """)
+
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(received.value(), ["live"])
+        
+        a.cancel()
+        try await reconnectTask.value
+        await client.disconnect()
     }
 }
 

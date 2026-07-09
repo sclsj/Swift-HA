@@ -42,6 +42,7 @@ public struct HomeAssistantStores: Equatable {
     }
 }
 
+@MainActor
 public final class AppState: ObservableObject {
     @Published public private(set) var connectionState: ConnectionState
     @Published public private(set) var stores: HomeAssistantStores

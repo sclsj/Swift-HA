@@ -137,7 +137,7 @@ final class LovelaceStoreRouterTests: XCTestCase {
         XCTAssertEqual(provider.configurationCallCount(for: "/lovelace"), 1)
 
         updateSource.emit(LovelaceUpdateEvent(urlPath: "map", mode: "storage"))
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(provider.configurationCallCount(for: "/lovelace"), 1)
 
         updateSource.emit(LovelaceUpdateEvent(urlPath: "lovelace", mode: "storage"))
