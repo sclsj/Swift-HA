@@ -20,27 +20,34 @@ struct TileCardView: View {
     }
 
     private func tileContent(_ stateObj: HassEntity) -> some View {
-        CardChrome {
-            HStack(spacing: 12) {
+        CardChrome(contentInsets: EdgeInsets(
+            top: 0,
+            leading: HAStyleTokens.tileHorizontalInset,
+            bottom: 0,
+            trailing: HAStyleTokens.tileHorizontalInset
+        )) {
+            HStack(spacing: HAStyleTokens.tileHorizontalInset) {
                 iconContent(stateObj)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(displayContext.displayName(for: stateObj, overrideName: config.name))
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .lineLimit(2)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
 
                     if config.hideState != true {
                         Text(stateDisplay(for: stateObj))
                             .font(.caption)
                             .foregroundColor(.secondary)
-                            .lineLimit(2)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer(minLength: 0)
             }
-            .frame(minHeight: 44)
+            .frame(minHeight: HAStyleTokens.tileMinimumHeight)
         }
         .contentShape(Rectangle())
         .onTapGesture {
@@ -75,16 +82,26 @@ struct TileCardView: View {
             color: iconColor(for: stateObj),
             size: 20
         )
-        .padding(8)
+        .frame(
+            width: HAStyleTokens.tileIconSize,
+            height: HAStyleTokens.tileIconSize
+        )
         .background(iconBackground(for: stateObj))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(Circle())
     }
 
     private func iconBackground(for stateObj: HassEntity) -> Color {
-        if HAStateColorResolver.color(for: stateObj) != nil {
-            return (iconColor(for: stateObj) ?? .accentColor).opacity(0.16)
+        if let stateColor = HAStateColorResolver.color(for: stateObj),
+           let color = Color(haHex: stateColor.hex) {
+            let isInactive = stateColor == HAStateColorResolver.inactive
+                || stateColor == HAStateColorResolver.unavailable
+            return color.opacity(
+                isInactive
+                    ? HAStyleTokens.inactiveControlFillOpacity
+                    : HAStyleTokens.activeControlFillOpacity
+            )
         }
-        return Color.secondary.opacity(0.10)
+        return Color.secondary.opacity(HAStyleTokens.inactiveControlFillOpacity)
     }
 
     private func iconColor(for stateObj: HassEntity) -> Color? {

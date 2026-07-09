@@ -1,6 +1,39 @@
 import NativeHACore
 import SwiftUI
 
+enum HAStyleTokens {
+    static let space2: CGFloat = 8
+    static let space4: CGFloat = 16
+
+    static let cardCornerRadius: CGFloat = 12
+    static let cardBorderWidth: CGFloat = 1
+    static let cardContentInsets = EdgeInsets(
+        top: space4,
+        leading: space4,
+        bottom: space4,
+        trailing: space4
+    )
+
+    static let entityIconColumnWidth: CGFloat = 40
+    static let entityRowMinimumHeight: CGFloat = 40
+    static let tileMinimumHeight: CGFloat = 56
+    static let tileIconSize: CGFloat = 36
+    static let tileHorizontalInset: CGFloat = 10
+
+    static let cardBorderColor = Color.primary.opacity(0.12)
+    static let rowHoverColor = Color.primary.opacity(0.04)
+    static let inactiveControlFillOpacity = 0.12
+    static let activeControlFillOpacity = 0.20
+
+    static var cardBackgroundColor: Color {
+        #if os(macOS)
+        Color(nsColor: .controlBackgroundColor)
+        #else
+        Color(uiColor: .secondarySystemBackground)
+        #endif
+    }
+}
+
 struct EntityDisplayContext {
     var states: [EntityID: HassEntity]
     var config: HAConfig?

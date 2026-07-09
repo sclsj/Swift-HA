@@ -65,23 +65,31 @@ struct CardHostView: View {
 }
 
 struct CardChrome<Content: View>: View {
+    let contentInsets: EdgeInsets
     let content: Content
 
-    init(@ViewBuilder content: () -> Content) {
+    init(
+        contentInsets: EdgeInsets = HAStyleTokens.cardContentInsets,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.contentInsets = contentInsets
         self.content = content()
     }
 
     var body: some View {
         content
-            .padding(12)
+            .padding(contentInsets)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.secondary.opacity(0.08))
+                RoundedRectangle(cornerRadius: HAStyleTokens.cardCornerRadius)
+                    .fill(HAStyleTokens.cardBackgroundColor)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.secondary.opacity(0.16), lineWidth: 1)
+                RoundedRectangle(cornerRadius: HAStyleTokens.cardCornerRadius)
+                    .stroke(
+                        HAStyleTokens.cardBorderColor,
+                        lineWidth: HAStyleTokens.cardBorderWidth
+                    )
             )
     }
 }

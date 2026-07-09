@@ -15,6 +15,8 @@ struct EntityRowView: View {
     var onMoreInfo: (EntityID) -> Void = { _ in }
     var onServiceCall: (HAServiceCall) -> Void = { _ in }
 
+    @State private var isHovering = false
+
     var body: some View {
         let model = EntityRowModel(row: row)
 
@@ -29,12 +31,16 @@ struct EntityRowView: View {
 
     @ViewBuilder
     private func rowContent(model: EntityRowModel, stateObj: HassEntity) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 0) {
             if model.showIcon {
                 LovelaceIconView(
                     entityID: stateObj.entityID,
                     icon: model.icon,
                     color: iconColor(for: stateObj, model: model)
+                )
+                .frame(
+                    width: HAStyleTokens.entityIconColumnWidth,
+                    height: HAStyleTokens.entityIconColumnWidth
                 )
             }
 
@@ -43,21 +49,35 @@ struct EntityRowView: View {
                     Text(displayContext.displayName(for: stateObj, overrideName: model.name))
                         .font(.subheadline)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 if let secondary = secondaryInfo(model: model, stateObj: stateObj) {
                     Text(secondary)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
-
-            Spacer(minLength: 8)
+            .padding(.leading, model.showIcon ? HAStyleTokens.space4 : 0)
+            .padding(.trailing, HAStyleTokens.space2)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             trailingContent(model: model, stateObj: stateObj)
         }
-        .padding(.vertical, 6)
+        .frame(
+            maxWidth: .infinity,
+            minHeight: HAStyleTokens.entityRowMinimumHeight,
+            alignment: .leading
+        )
+        .background(
+            RoundedRectangle(cornerRadius: HAStyleTokens.space2)
+                .fill(isHovering ? HAStyleTokens.rowHoverColor : Color.clear)
+        )
         .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovering = hovering
+        }
         .onTapGesture {
             performTap(model: model, stateObj: stateObj)
         }
@@ -105,7 +125,8 @@ struct EntityRowView: View {
             .font(.subheadline)
             .foregroundColor(.secondary)
             .multilineTextAlignment(.trailing)
-            .lineLimit(2)
+            .lineLimit(1)
+            .truncationMode(.tail)
     }
 
     private func performTap(model: EntityRowModel, stateObj: HassEntity) {
