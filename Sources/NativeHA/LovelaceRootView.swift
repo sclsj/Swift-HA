@@ -8,6 +8,7 @@ struct LovelaceRootView: View {
     let displayContext: EntityDisplayContext
     var templateSubscriber: MarkdownTemplateSubscribing?
     var userName: String = "Home Assistant"
+    var userID: String?
     let onSelectDashboard: (LovelaceDashboardReference) -> Void
     let onSelectView: (LovelaceViewRoute) -> Void
     let onRetry: () -> Void
@@ -26,11 +27,15 @@ struct LovelaceRootView: View {
                 displayContext: displayContext,
                 templateSubscriber: templateSubscriber,
                 userName: userName,
+                userID: userID,
                 onSelectView: onSelectView,
                 onRetry: onRetry,
                 onMoreInfo: onMoreInfo,
                 onServiceCall: onServiceCall
             )
+        }
+        .task(id: userID ?? "") {
+            store.setCurrentUserID(userID)
         }
     }
 

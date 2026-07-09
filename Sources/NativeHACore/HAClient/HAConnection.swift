@@ -39,6 +39,7 @@ public final class HAConnection: HAClientProtocol {
 
     public func connect() async throws {
         let client = try resolvedClient()
+        installReconnectRefresh(on: client)
         try await client.connect()
         try await refreshStores()
         try await subscribeToUpdates()
@@ -49,6 +50,7 @@ public final class HAConnection: HAClientProtocol {
             subscription.cancel()
         }
         subscriptions.removeAll()
+        (client as? HAWebSocketReconnectNotifying)?.onReconnect = nil
         await client?.disconnect()
     }
 
@@ -102,7 +104,12 @@ public final class HAConnection: HAClientProtocol {
         let stateSubscription: HASubscription = try await client.subscribe(
             HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("state_changed")])
         ) { [weak self] (event: HAEvent<HAStateChangedEventData>) in
-            self?.stateStore.apply(stateChanged: event)
+            guard let stateStore = self?.stateStore else {
+                return
+            }
+            Task { @MainActor in
+                stateStore.apply(stateChanged: event)
+            }
         }
         subscriptions.append(stateSubscription)
 
@@ -155,7 +162,25 @@ public final class HAConnection: HAClientProtocol {
                 return
             }
             let panels: HAPanels = try await client.callWS(HAWebSocketRequest(type: "get_panels"))
-            self.stateStore.apply(panels: panels)
+            await self.stateStore.apply(panels: panels)
+        }
+    }
+
+    private func installReconnectRefresh(on client: HAWebSocketClientProtocol) {
+        (client as? HAWebSocketReconnectNotifying)?.onReconnect = { [weak self] in
+            Task { [weak self] in
+                guard let self = self else {
+                    return
+                }
+                do {
+                    try await self.refreshStores()
+                } catch {
+                    self.logger?.warning(
+                        "Failed to refresh Home Assistant stores after reconnect",
+                        metadata: ["error": String(describing: error)]
+                    )
+                }
+            }
         }
     }
 

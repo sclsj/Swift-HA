@@ -80,16 +80,31 @@ public struct HistoryAPI {
         now: @escaping () -> Date = Date.init,
         onHistory: @escaping (HistoryStates) -> Void
     ) async throws -> HASubscription {
-        let stream = HistoryStream(hoursToShow: hoursToShow, now: now)
-        return try await subscribeHistoryStream(
-            startTime: now().addingTimeInterval(-60 * 60 * hoursToShow),
-            entityIDs: entityIDs,
-            currentStates: currentStates,
-            minimalResponse: minimalResponse,
-            significantChangesOnly: significantChangesOnly,
-            noAttributes: noAttributes
-        ) { message in
-            onHistory(stream.processMessage(message))
+        let session = HistoryStreamSession(hoursToShow: hoursToShow, now: now)
+        let resolvedNoAttributes = noAttributes ?? !entityIDs.contains {
+            Self.entityIDHistoryNeedsAttributes(currentStates: currentStates, entityID: $0)
+        }
+
+        return try await client.subscribe(
+            buildMessage: {
+                HAWebSocketRequest(
+                    type: "history/stream",
+                    payload: [
+                        "start_time": .string(HAHistoryDateCoding.isoString(
+                            from: now().addingTimeInterval(-60 * 60 * hoursToShow)
+                        )),
+                        "entity_ids": .array(entityIDs.map(HAJSONValue.string)),
+                        "minimal_response": .bool(minimalResponse),
+                        "significant_changes_only": .bool(significantChangesOnly),
+                        "no_attributes": .bool(resolvedNoAttributes)
+                    ]
+                )
+            },
+            onReplay: {
+                session.reset()
+            }
+        ) { (message: HistoryStreamMessage) in
+            onHistory(session.process(message))
         }
     }
 
@@ -137,6 +152,31 @@ public struct HistoryAPI {
         return !entityIDs.contains {
             Self.entityIDHistoryNeedsAttributes(currentStates: currentStates, entityID: $0)
         }
+    }
+}
+
+private final class HistoryStreamSession {
+    private let hoursToShow: Double
+    private let now: () -> Date
+    private let lock = NSLock()
+    private var stream: HistoryStream
+
+    init(hoursToShow: Double, now: @escaping () -> Date) {
+        self.hoursToShow = hoursToShow
+        self.now = now
+        self.stream = HistoryStream(hoursToShow: hoursToShow, now: now)
+    }
+
+    func reset() {
+        lock.lock()
+        stream = HistoryStream(hoursToShow: hoursToShow, now: now)
+        lock.unlock()
+    }
+
+    func process(_ message: HistoryStreamMessage) -> HistoryStates {
+        lock.lock()
+        defer { lock.unlock() }
+        return stream.processMessage(message)
     }
 }
 

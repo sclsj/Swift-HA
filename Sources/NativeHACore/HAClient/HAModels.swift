@@ -92,6 +92,27 @@ public extension HAJSONValue {
     }
 }
 
+public struct HAUser: Decodable, Equatable {
+    public var id: String
+    public var name: String
+    public var isAdmin: Bool
+    public var isOwner: Bool
+
+    public init(id: String, name: String, isAdmin: Bool = false, isOwner: Bool = false) {
+        self.id = id
+        self.name = name
+        self.isAdmin = isAdmin
+        self.isOwner = isOwner
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case isAdmin = "is_admin"
+        case isOwner = "is_owner"
+    }
+}
+
 enum HADateCoding {
     private static let fractionalFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()

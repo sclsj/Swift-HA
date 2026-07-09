@@ -54,6 +54,7 @@ final class HASnapshotDecodingTests: XCTestCase {
         XCTAssertEqual(systemData.value?["default_panel"], .string("lovelace"))
     }
 
+    @MainActor
     func testStoresApplySnapshotModels() throws {
         let states: [HassEntity] = try decode("get_states")
         let services: HAServices = try decode("get_services")

@@ -86,7 +86,7 @@ public struct LovelaceRouter: Equatable {
             return value
         case let .array(values):
             guard let userID = userID else {
-                return true
+                return false
             }
             return values.contains { value in
                 value.objectValue?["user"]?.stringValue == userID
@@ -116,16 +116,19 @@ public struct LovelaceRouter: Equatable {
            !requestedViewPath.isEmpty {
             let requestedIndex = Int(requestedViewPath)
             for index in views.indices {
-                if views[index].path == requestedViewPath || index == requestedIndex {
+                if (views[index].path == requestedViewPath || index == requestedIndex),
+                   isVisible(views[index], userID: userID) {
                     return index
                 }
             }
         }
 
-        if let requestedViewIndex = requestedViewIndex, views.indices.contains(requestedViewIndex) {
+        if let requestedViewIndex = requestedViewIndex,
+           views.indices.contains(requestedViewIndex),
+           isVisible(views[requestedViewIndex], userID: userID) {
             return requestedViewIndex
         }
 
-        return views.indices.first { isVisible(views[$0], userID: userID) } ?? views.startIndex
+        return views.indices.first { isVisible(views[$0], userID: userID) }
     }
 }

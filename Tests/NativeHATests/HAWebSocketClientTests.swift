@@ -84,6 +84,144 @@ final class HAWebSocketClientTests: XCTestCase {
         await client.disconnect()
     }
 
+    func testReconnectReplaysActiveSubscriptionWithFreshServerIDOnce() async throws {
+        let (client, transport) = try await makeConnectedClient()
+        let callback = expectation(description: "replayed subscription callback")
+        let receivedValues = LockedValue<[String]>([])
+
+        let subscriptionTask = Task { () -> HASubscription in
+            try await client.subscribe(
+                HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("test_event")])
+            ) { (event: HAJSONValue) in
+                if let value = event.objectValue?["value"]?.stringValue {
+                    receivedValues.mutate { $0.append(value) }
+                    callback.fulfill()
+                }
+            }
+        }
+
+        try await waitForNumberedRequestCount(1, transport: transport)
+        let initialRequest = try XCTUnwrap(transport.numberedSentObjects().first)
+        let initialID = try XCTUnwrap(initialRequest["id"]?.integerValue)
+        transport.enqueue(resultMessage(id: initialID))
+        let subscription = try await subscriptionTask.value
+
+        let reconnectCallback = expectation(description: "reconnect callback")
+        client.onReconnect = {
+            reconnectCallback.fulfill()
+        }
+        transport.queueAuthenticationForNextConnection()
+        let reconnectTask = Task {
+            try await client.reconnect()
+        }
+
+        try await waitForNumberedRequestCount(2, transport: transport)
+        let replayRequest = try transport.numberedSentObjects()[1]
+        let replayID = try XCTUnwrap(replayRequest["id"]?.integerValue)
+        XCTAssertGreaterThan(replayID, initialID)
+        XCTAssertEqual(replayRequest["event_type"], .string("test_event"))
+        transport.enqueue(resultMessage(id: replayID))
+        try await reconnectTask.value
+        wait(for: [reconnectCallback], timeout: 1.0)
+
+        transport.enqueue("""
+        {"id":\(initialID),"type":"event","event":{"value":"stale"}}
+        """)
+        transport.enqueue("""
+        {"id":\(replayID),"type":"event","event":{"value":"fresh"}}
+        """)
+
+        wait(for: [callback], timeout: 1.0)
+        XCTAssertEqual(receivedValues.value(), ["fresh"])
+
+        subscription.cancel()
+        await client.disconnect()
+    }
+
+    func testCancelledSubscriptionIsNotReplayed() async throws {
+        let (client, transport) = try await makeConnectedClient()
+        let subscriptionTask = Task { () -> HASubscription in
+            try await client.subscribe(
+                HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("test_event")])
+            ) { (_: HAJSONValue) in }
+        }
+
+        try await waitForNumberedRequestCount(1, transport: transport)
+        let initialID = try XCTUnwrap(transport.numberedSentObjects()[0]["id"]?.integerValue)
+        transport.enqueue(resultMessage(id: initialID))
+        let subscription = try await subscriptionTask.value
+        subscription.cancel()
+
+        transport.queueAuthenticationForNextConnection()
+        try await client.reconnect()
+
+        XCTAssertEqual(try transport.numberedSentObjects().count, 1)
+        await client.disconnect()
+    }
+
+    func testCancelledLaterRequestDoesNotAdvanceSendOrderPastEarlierRequests() async throws {
+        let (client, transport) = try await makeConnectedClient()
+        transport.blockSends(types: ["request_1", "request_2", "request_3", "request_4"])
+
+        let reserved1 = expectation(description: "request 1 reserved")
+        let reserved2 = expectation(description: "request 2 reserved")
+        let reserved3 = expectation(description: "request 3 reserved")
+        let reserved4 = expectation(description: "request 4 reserved")
+        client.requestReservationObserver = { id in
+            switch id {
+            case 1: reserved1.fulfill()
+            case 2: reserved2.fulfill()
+            case 3: reserved3.fulfill()
+            case 4: reserved4.fulfill()
+            default: break
+            }
+        }
+
+        let first = Task { () -> HAEmptyResponse in
+            try await client.callWS(HAWebSocketRequest(type: "request_1"))
+        }
+        wait(for: [reserved1], timeout: 1.0)
+        try await waitForNumberedRequestCount(1, transport: transport)
+
+        let second = Task { () -> HAEmptyResponse in
+            try await client.callWS(HAWebSocketRequest(type: "request_2"))
+        }
+        wait(for: [reserved2], timeout: 1.0)
+        let third = Task { () -> HAEmptyResponse in
+            try await client.callWS(HAWebSocketRequest(type: "request_3"))
+        }
+        wait(for: [reserved3], timeout: 1.0)
+        third.cancel()
+
+        let fourth = Task { () -> HAEmptyResponse in
+            try await client.callWS(HAWebSocketRequest(type: "request_4"))
+        }
+        wait(for: [reserved4], timeout: 1.0)
+        XCTAssertEqual(try transport.numberedSentObjects().compactMap { $0["id"]?.integerValue }, [1])
+
+        XCTAssertTrue(transport.releaseNextSend(type: "request_1"))
+        try await waitForNumberedRequestCount(2, transport: transport)
+        XCTAssertEqual(try transport.numberedSentObjects().compactMap { $0["id"]?.integerValue }, [1, 2])
+        transport.enqueue(resultMessage(id: 1))
+
+        XCTAssertTrue(transport.releaseNextSend(type: "request_2"))
+        try await waitForNumberedRequestCount(3, transport: transport)
+        XCTAssertEqual(try transport.numberedSentObjects().compactMap { $0["id"]?.integerValue }, [1, 2, 4])
+        transport.enqueue(resultMessage(id: 2))
+
+        XCTAssertTrue(transport.releaseNextSend(type: "request_4"))
+        transport.enqueue(resultMessage(id: 4))
+
+        _ = try await first.value
+        _ = try await second.value
+        _ = try await fourth.value
+        guard case .failure = await third.result else {
+            return XCTFail("Expected the cancelled third request to fail.")
+        }
+
+        await client.disconnect()
+    }
+
     private func makeConnectedClient() async throws -> (HAWebSocketClient, MockWebSocketTransport) {
         let transport = MockWebSocketTransport()
         transport.enqueue("""
@@ -115,6 +253,23 @@ final class HAWebSocketClientTests: XCTestCase {
         XCTFail("Expected at least \(count) sent WebSocket messages.")
         throw HAWebSocketClientError.timedOut
     }
+
+    private func waitForNumberedRequestCount(_ count: Int, transport: MockWebSocketTransport) async throws {
+        for _ in 0..<100 {
+            if try transport.numberedSentObjects().count >= count {
+                return
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTFail("Expected at least \(count) numbered WebSocket requests.")
+        throw HAWebSocketClientError.timedOut
+    }
+
+    private func resultMessage(id: Int) -> String {
+        """
+        {"id":\(id),"type":"result","success":true,"result":null}
+        """
+    }
 }
 
 private extension HAJSONValue {
@@ -136,17 +291,42 @@ private final class MockWebSocketTransport: HAWebSocketTransport {
     private var queuedMessages: [Result<HAWebSocketTransportMessage, Error>] = []
     private var receivers: [CheckedContinuation<HAWebSocketTransportMessage, Error>] = []
     private var connectedURL: URL?
+    private var nextConnectionMessages: [String] = []
+    private var blockedSendTypes: Set<String> = []
+    private var blockedSendContinuations: [String: [CheckedContinuation<Void, Never>]] = [:]
 
     func connect(url: URL, headers: [String: String]) async throws {
         lock.lock()
         connectedURL = url
+        let connectionMessages = nextConnectionMessages
+        nextConnectionMessages.removeAll()
         lock.unlock()
+        for message in connectionMessages {
+            deliver(.success(.string(message)))
+        }
     }
 
     func send(_ string: String) async throws {
+        let type = try? JSONDecoder()
+            .decode([String: HAJSONValue].self, from: Data(string.utf8))["type"]?
+            .stringValue
+
         lock.lock()
-        sent.append(string)
+        let shouldBlock = type.map { blockedSendTypes.contains($0) } ?? false
         lock.unlock()
+
+        if let type = type, shouldBlock {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                lock.lock()
+                sent.append(string)
+                blockedSendContinuations[type, default: []].append(continuation)
+                lock.unlock()
+            }
+        } else {
+            lock.lock()
+            sent.append(string)
+            lock.unlock()
+        }
     }
 
     func receive() async throws -> HAWebSocketTransportMessage {
@@ -190,6 +370,41 @@ private final class MockWebSocketTransport: HAWebSocketTransport {
         return try JSONDecoder().decode([String: HAJSONValue].self, from: data)
     }
 
+    func numberedSentObjects() throws -> [[String: HAJSONValue]] {
+        try sentMessages().compactMap { message in
+            let object = try JSONDecoder().decode([String: HAJSONValue].self, from: Data(message.utf8))
+            return object["id"] == nil ? nil : object
+        }
+    }
+
+    func queueAuthenticationForNextConnection() {
+        lock.lock()
+        nextConnectionMessages = [
+            #"{"type":"auth_required","ha_version":"2026.5.4"}"#,
+            #"{"type":"auth_ok","ha_version":"2026.5.4"}"#
+        ]
+        lock.unlock()
+    }
+
+    func blockSends(types: Set<String>) {
+        lock.lock()
+        blockedSendTypes.formUnion(types)
+        lock.unlock()
+    }
+
+    func releaseNextSend(type: String) -> Bool {
+        lock.lock()
+        guard var continuations = blockedSendContinuations[type], !continuations.isEmpty else {
+            lock.unlock()
+            return false
+        }
+        let continuation = continuations.removeFirst()
+        blockedSendContinuations[type] = continuations
+        lock.unlock()
+        continuation.resume()
+        return true
+    }
+
     private func deliver(_ result: Result<HAWebSocketTransportMessage, Error>) {
         lock.lock()
         if !receivers.isEmpty {
@@ -221,5 +436,11 @@ private final class LockedValue<Value> {
         lock.lock()
         defer { lock.unlock() }
         return storage
+    }
+
+    func mutate(_ mutation: (inout Value) -> Void) {
+        lock.lock()
+        mutation(&storage)
+        lock.unlock()
     }
 }

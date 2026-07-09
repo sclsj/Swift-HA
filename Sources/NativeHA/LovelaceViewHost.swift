@@ -6,6 +6,7 @@ struct LovelaceViewHost: View {
     let displayContext: EntityDisplayContext
     var templateSubscriber: MarkdownTemplateSubscribing?
     var userName: String = "Home Assistant"
+    var userID: String?
     let onSelectView: (LovelaceViewRoute) -> Void
     let onRetry: () -> Void
     var onMoreInfo: (EntityID) -> Void = { _ in }
@@ -85,13 +86,14 @@ struct LovelaceViewHost: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(Array(content.config.views.enumerated()), id: \.offset) { index, view in
-                    if router.isVisible(view) {
+                    if router.isVisible(view, userID: userID) {
                         Button {
                             let route = router.route(
                                 dashboardPath: content.dashboardPath,
                                 config: content.config,
                                 requestedViewPath: view.path,
-                                requestedViewIndex: view.path == nil ? index : nil
+                                requestedViewIndex: view.path == nil ? index : nil,
+                                userID: userID
                             )
                             onSelectView(route)
                         } label: {

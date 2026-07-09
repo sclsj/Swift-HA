@@ -2,6 +2,47 @@ import XCTest
 @testable import NativeHACore
 
 final class HistoryStreamTests: XCTestCase {
+    func testTimeWindowSubscriptionRebuildsWindowAndStreamOnReplay() async throws {
+        let client = ReplayCapturingWebSocketClient()
+        let now = LockedDate(Date(timeIntervalSince1970: 10_000))
+        let received = LockedHistoryValues()
+        let api = HistoryAPI(client: client)
+
+        let subscription = try await api.subscribeHistoryStatesTimeWindow(
+            hoursToShow: 1,
+            entityIDs: ["sensor.power"],
+            now: { now.value }
+        ) { history in
+            received.append(history)
+        }
+
+        XCTAssertEqual(client.builtMessages.count, 1)
+        XCTAssertEqual(
+            client.builtMessages[0].payload["start_time"],
+            .string(HAHistoryDateCoding.isoString(from: Date(timeIntervalSince1970: 6_400)))
+        )
+
+        client.emit(HistoryStreamMessage(states: [
+            "sensor.power": [historyState("old-window", lu: 9_000)]
+        ]))
+        XCTAssertEqual(received.last?["sensor.power"]?.map(\.state), ["old-window"])
+
+        now.value = Date(timeIntervalSince1970: 20_000)
+        client.replay()
+        XCTAssertEqual(client.builtMessages.count, 2)
+        XCTAssertEqual(
+            client.builtMessages[1].payload["start_time"],
+            .string(HAHistoryDateCoding.isoString(from: Date(timeIntervalSince1970: 16_400)))
+        )
+
+        client.emit(HistoryStreamMessage(states: [
+            "sensor.power": [historyState("new-window", lu: 19_000)]
+        ]))
+        XCTAssertEqual(received.last?["sensor.power"]?.map(\.state), ["new-window"])
+
+        subscription.cancel()
+    }
+
     func testProcessMessageInitializesKeepsEmptyMessagesAndMergesIncrementalUpdates() {
         let now = Date(timeIntervalSince1970: 10_000)
         let stream = HistoryStream(hoursToShow: 1, now: { now })
@@ -90,6 +131,91 @@ final class HistoryStreamTests: XCTestCase {
 
         XCTAssertEqual(result["sensor.power"]?.first?.lastUpdated, purgeBefore + 100)
         XCTAssertEqual(result["sensor.power"]?.first?.lastChanged, purgeBefore + 50)
+    }
+}
+
+private final class ReplayCapturingWebSocketClient: HAWebSocketClientProtocol {
+    private var buildMessage: (() -> HAWebSocketRequest)?
+    private var replayHandler: (() -> Void)?
+    private var eventHandler: ((HistoryStreamMessage) -> Void)?
+    private(set) var builtMessages: [HAWebSocketRequest] = []
+
+    func connect() async throws {}
+    func disconnect() async {}
+
+    func callWS<T, Message>(_ message: Message) async throws -> T where T: Decodable, Message: Encodable {
+        throw HAWebSocketClientError.disconnected
+    }
+
+    func subscribe<T, Message>(
+        _ message: Message,
+        onEvent: @escaping (T) -> Void
+    ) async throws -> HASubscription where T: Decodable, Message: Encodable {
+        throw HAWebSocketClientError.disconnected
+    }
+
+    func subscribe<T>(
+        buildMessage: @escaping () -> HAWebSocketRequest,
+        onReplay: @escaping () -> Void,
+        onEvent: @escaping (T) -> Void
+    ) async throws -> HASubscription where T: Decodable {
+        self.buildMessage = buildMessage
+        self.replayHandler = onReplay
+        self.eventHandler = { message in
+            onEvent(message as! T)
+        }
+        builtMessages.append(buildMessage())
+        return HASubscription(id: 1) {}
+    }
+
+    func replay() {
+        replayHandler?()
+        if let buildMessage = buildMessage {
+            builtMessages.append(buildMessage())
+        }
+    }
+
+    func emit(_ message: HistoryStreamMessage) {
+        eventHandler?(message)
+    }
+}
+
+private final class LockedDate {
+    private let lock = NSLock()
+    private var storage: Date
+
+    init(_ value: Date) {
+        storage = value
+    }
+
+    var value: Date {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storage
+        }
+        set {
+            lock.lock()
+            storage = newValue
+            lock.unlock()
+        }
+    }
+}
+
+private final class LockedHistoryValues {
+    private let lock = NSLock()
+    private var values: [HistoryStates] = []
+
+    var last: HistoryStates? {
+        lock.lock()
+        defer { lock.unlock() }
+        return values.last
+    }
+
+    func append(_ value: HistoryStates) {
+        lock.lock()
+        values.append(value)
+        lock.unlock()
     }
 }
 

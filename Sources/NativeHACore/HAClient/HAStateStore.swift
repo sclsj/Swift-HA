@@ -6,6 +6,7 @@ public final class HAStateStore: ObservableObject {
     @Published public private(set) var states: [EntityID: HassEntity]
     @Published public private(set) var services: HAServices
     @Published public private(set) var panels: HAPanels
+    @Published public private(set) var currentUser: HAUser?
     @Published public private(set) var userData: [String: HAJSONValue]
     @Published public private(set) var systemData: [String: HAJSONValue]
 
@@ -14,6 +15,7 @@ public final class HAStateStore: ObservableObject {
         states: [EntityID: HassEntity] = [:],
         services: HAServices = [:],
         panels: HAPanels = [:],
+        currentUser: HAUser? = nil,
         userData: [String: HAJSONValue] = [:],
         systemData: [String: HAJSONValue] = [:]
     ) {
@@ -21,6 +23,7 @@ public final class HAStateStore: ObservableObject {
         self.states = states
         self.services = services
         self.panels = panels
+        self.currentUser = currentUser
         self.userData = userData
         self.systemData = systemData
     }
@@ -30,6 +33,7 @@ public final class HAStateStore: ObservableObject {
         async let stateList: [HassEntity] = client.callWS(HAWebSocketRequest(type: "get_states"))
         async let services: HAServices = client.callWS(HAWebSocketRequest(type: "get_services"))
         async let panels: HAPanels = client.callWS(HAWebSocketRequest(type: "get_panels"))
+        async let currentUser: HAUser = client.callWS(HAWebSocketRequest(type: "auth/current_user"))
         async let userData: HAFrontendDataResponse = client.callWS(
             HAWebSocketRequest(type: "frontend/get_user_data", payload: ["key": .string("core")])
         )
@@ -42,25 +46,29 @@ public final class HAStateStore: ObservableObject {
             stateList,
             services,
             panels,
+            currentUser,
             userData,
             systemData
         )
 
-        apply(
+        await apply(
             config: resolved.0,
             states: resolved.1,
             services: resolved.2,
             panels: resolved.3,
-            userData: resolved.4.value ?? [:],
-            systemData: resolved.5.value ?? [:]
+            currentUser: resolved.4,
+            userData: resolved.5.value ?? [:],
+            systemData: resolved.6.value ?? [:]
         )
     }
 
+    @MainActor
     public func apply(
         config: HAConfig? = nil,
         states stateList: [HassEntity]? = nil,
         services: HAServices? = nil,
         panels: HAPanels? = nil,
+        currentUser: HAUser? = nil,
         userData: [String: HAJSONValue]? = nil,
         systemData: [String: HAJSONValue]? = nil
     ) {
@@ -76,6 +84,9 @@ public final class HAStateStore: ObservableObject {
         if let panels = panels {
             self.panels = panels
         }
+        if let currentUser = currentUser {
+            self.currentUser = currentUser
+        }
         if let userData = userData {
             self.userData = userData
         }
@@ -84,6 +95,7 @@ public final class HAStateStore: ObservableObject {
         }
     }
 
+    @MainActor
     public func apply(stateChanged event: HAEvent<HAStateChangedEventData>) {
         guard event.eventType == "state_changed" else {
             return

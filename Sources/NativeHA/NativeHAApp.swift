@@ -138,9 +138,15 @@ private struct RootShellView: View {
             await MainActor.run {
                 appState.setConnectionState(.connecting)
             }
+            environment.logger.info("Connecting to Home Assistant")
 
             do {
                 try await environment.client.connect()
+                let summary = (environment.client as? HAConnection)?.storeSummary
+                environment.logger.info(
+                    "Connected to Home Assistant",
+                    metadata: storeSummaryMetadata(summary)
+                )
                 await MainActor.run {
                     appState.setConnectionState(.connected)
                     if let connection = environment.client as? HAConnection {
@@ -148,11 +154,31 @@ private struct RootShellView: View {
                     }
                 }
             } catch {
+                environment.logger.error(
+                    "Failed to connect to Home Assistant",
+                    metadata: ["error": String(describing: error)]
+                )
                 await MainActor.run {
                     appState.setConnectionState(.failed(message: String(describing: error)))
                 }
             }
         }
+    }
+
+    private func storeSummaryMetadata(_ summary: HomeAssistantStores?) -> [String: String] {
+        guard let summary = summary else {
+            return [:]
+        }
+
+        return [
+            "states": String(summary.statesCount),
+            "entities": String(summary.entitiesCount),
+            "devices": String(summary.devicesCount),
+            "areas": String(summary.areasCount),
+            "floors": String(summary.floorsCount),
+            "services": String(summary.servicesCount),
+            "panels": String(summary.panelsCount)
+        ]
     }
 }
 

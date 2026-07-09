@@ -40,7 +40,7 @@ public final class HARegistryStore: ObservableObject {
         )
 
         let resolved = try await (displayResponse, entityRegistry, devices, areas, floors)
-        apply(
+        await apply(
             displayResponse: resolved.0,
             entityRegistry: resolved.1,
             devices: resolved.2,
@@ -53,37 +53,48 @@ public final class HARegistryStore: ObservableObject {
         let response: HAEntityRegistryDisplayResponse = try await client.callWS(
             HAWebSocketRequest(type: "config/entity_registry/list_for_display")
         )
-        entities = response.expandedEntities
+        await MainActor.run {
+            entities = response.expandedEntities
+        }
     }
 
     public func refreshEntityRegistry(using client: HAWebSocketClientProtocol) async throws {
         let entries: [HAEntityRegistryEntry] = try await client.callWS(
             HAWebSocketRequest(type: "config/entity_registry/list")
         )
-        entityRegistry = Dictionary(uniqueKeysWithValues: entries.map { ($0.entityID, $0) })
+        await MainActor.run {
+            entityRegistry = Dictionary(uniqueKeysWithValues: entries.map { ($0.entityID, $0) })
+        }
     }
 
     public func refreshDevices(using client: HAWebSocketClientProtocol) async throws {
         let entries: [HADeviceRegistryEntry] = try await client.callWS(
             HAWebSocketRequest(type: "config/device_registry/list")
         )
-        devices = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+        await MainActor.run {
+            devices = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
+        }
     }
 
     public func refreshAreas(using client: HAWebSocketClientProtocol) async throws {
         let entries: [HAAreaRegistryEntry] = try await client.callWS(
             HAWebSocketRequest(type: "config/area_registry/list")
         )
-        areas = Dictionary(uniqueKeysWithValues: entries.map { ($0.areaID, $0) })
+        await MainActor.run {
+            areas = Dictionary(uniqueKeysWithValues: entries.map { ($0.areaID, $0) })
+        }
     }
 
     public func refreshFloors(using client: HAWebSocketClientProtocol) async throws {
         let entries: [HAFloorRegistryEntry] = try await client.callWS(
             HAWebSocketRequest(type: "config/floor_registry/list")
         )
-        floors = Dictionary(uniqueKeysWithValues: entries.map { ($0.floorID, $0) })
+        await MainActor.run {
+            floors = Dictionary(uniqueKeysWithValues: entries.map { ($0.floorID, $0) })
+        }
     }
 
+    @MainActor
     public func apply(
         displayResponse: HAEntityRegistryDisplayResponse? = nil,
         entityRegistry entityRegistryList: [HAEntityRegistryEntry]? = nil,

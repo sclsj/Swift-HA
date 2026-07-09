@@ -196,6 +196,7 @@ public final class LovelaceStore: ObservableObject {
     @Published public private(set) var state: LovelaceStoreState
     @Published public private(set) var dashboards: [LovelaceDashboardReference]
     @Published public private(set) var currentDashboardPath: String
+    @Published public private(set) var currentUserID: String?
 
     private let configProvider: LovelaceConfigProvider
     private let updateEventSource: LovelaceUpdateEventSource
@@ -212,7 +213,8 @@ public final class LovelaceStore: ObservableObject {
         updateEventSource: LovelaceUpdateEventSource = PlaceholderLovelaceUpdateEventSource(),
         router: LovelaceRouter = LovelaceRouter(),
         clock: Clock? = nil,
-        logger: Logger? = nil
+        logger: Logger? = nil,
+        currentUserID: String? = nil
     ) {
         self.configProvider = configProvider
         self.updateEventSource = updateEventSource
@@ -222,6 +224,7 @@ public final class LovelaceStore: ObservableObject {
         self.state = .idle
         self.dashboards = []
         self.currentDashboardPath = "/lovelace"
+        self.currentUserID = currentUserID
     }
 
     public convenience init(environment: AppEnvironment) {
@@ -240,12 +243,14 @@ public final class LovelaceStore: ObservableObject {
     public func load(
         dashboardPath: String,
         viewPath: String? = nil,
-        viewIndex: Int? = nil
+        viewIndex: Int? = nil,
+        userID: String? = nil
     ) async {
         let normalizedDashboardPath = AppRoute.dashboardPath(dashboardPath)
         currentDashboardPath = normalizedDashboardPath
         requestedViewPath = viewPath
         requestedViewIndex = viewIndex
+        currentUserID = userID
         state = .loading(dashboardPath: normalizedDashboardPath)
 
         await ensureUpdateSubscription()
@@ -274,7 +279,8 @@ public final class LovelaceStore: ObservableObject {
         await load(
             dashboardPath: currentDashboardPath,
             viewPath: requestedViewPath,
-            viewIndex: requestedViewIndex
+            viewIndex: requestedViewIndex,
+            userID: currentUserID
         )
     }
 
@@ -287,6 +293,14 @@ public final class LovelaceStore: ObservableObject {
     public func selectView(index: Int?) {
         requestedViewPath = nil
         requestedViewIndex = index
+        updateLoadedSelection()
+    }
+
+    public func setCurrentUserID(_ userID: String?) {
+        guard currentUserID != userID else {
+            return
+        }
+        currentUserID = userID
         updateLoadedSelection()
     }
 
@@ -338,7 +352,8 @@ public final class LovelaceStore: ObservableObject {
                 dashboardPath: dashboardPath,
                 config: config,
                 requestedViewPath: viewPath,
-                requestedViewIndex: viewIndex
+                requestedViewIndex: viewIndex,
+                userID: currentUserID
             )
             let selectedView = route.selectedViewIndex.flatMap { index in
                 config.views.indices.contains(index) ? config.views[index] : nil
@@ -376,7 +391,8 @@ public final class LovelaceStore: ObservableObject {
             dashboardPath: content.dashboardPath,
             config: content.config,
             requestedViewPath: requestedViewPath,
-            requestedViewIndex: requestedViewIndex
+            requestedViewIndex: requestedViewIndex,
+            userID: currentUserID
         )
         content.selectedRoute = route
         content.selectedView = route.selectedViewIndex.flatMap { index in

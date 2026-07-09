@@ -32,6 +32,25 @@ public protocol HAWebSocketClientProtocol: AnyObject {
         _ message: Message,
         onEvent: @escaping (T) -> Void
     ) async throws -> HASubscription
+    func subscribe<T: Decodable>(
+        buildMessage: @escaping () -> HAWebSocketRequest,
+        onReplay: @escaping () -> Void,
+        onEvent: @escaping (T) -> Void
+    ) async throws -> HASubscription
+}
+
+public extension HAWebSocketClientProtocol {
+    func subscribe<T: Decodable>(
+        buildMessage: @escaping () -> HAWebSocketRequest,
+        onReplay: @escaping () -> Void,
+        onEvent: @escaping (T) -> Void
+    ) async throws -> HASubscription {
+        try await subscribe(buildMessage(), onEvent: onEvent)
+    }
+}
+
+public protocol HAWebSocketReconnectNotifying: AnyObject {
+    var onReconnect: (() -> Void)? { get set }
 }
 
 public struct HAPingConfiguration: Equatable {
@@ -66,37 +85,21 @@ public final class URLSessionHAWebSocketTransport: HAWebSocketTransport {
         guard let task = task else {
             throw HAWebSocketClientError.disconnected
         }
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            task.send(.string(string)) { error in
-                if let error = error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume()
-                }
-            }
-        }
+        try await task.send(.string(string))
     }
 
     public func receive() async throws -> HAWebSocketTransportMessage {
         guard let task = task else {
             throw HAWebSocketClientError.disconnected
         }
-        return try await withCheckedThrowingContinuation { continuation in
-            task.receive { result in
-                switch result {
-                case let .success(message):
-                    switch message {
-                    case let .string(value):
-                        continuation.resume(returning: .string(value))
-                    case let .data(value):
-                        continuation.resume(returning: .data(value))
-                    @unknown default:
-                        continuation.resume(throwing: HAWebSocketClientError.unsupportedTransportMessage)
-                    }
-                case let .failure(error):
-                    continuation.resume(throwing: error)
-                }
-            }
+        let message = try await task.receive()
+        switch message {
+        case let .string(value):
+            return .string(value)
+        case let .data(value):
+            return .data(value)
+        @unknown default:
+            throw HAWebSocketClientError.unsupportedTransportMessage
         }
     }
 
@@ -107,9 +110,17 @@ public final class URLSessionHAWebSocketTransport: HAWebSocketTransport {
 }
 
 private final class HAAnySubscriptionHandler {
+    let buildMessageObject: () throws -> [String: HAJSONValue]
+    let onReplay: () -> Void
     private let handleValue: (HAJSONValue) -> Void
 
-    init(handleValue: @escaping (HAJSONValue) -> Void) {
+    init(
+        buildMessageObject: @escaping () throws -> [String: HAJSONValue],
+        onReplay: @escaping () -> Void,
+        handleValue: @escaping (HAJSONValue) -> Void
+    ) {
+        self.buildMessageObject = buildMessageObject
+        self.onReplay = onReplay
         self.handleValue = handleValue
     }
 
@@ -118,13 +129,95 @@ private final class HAAnySubscriptionHandler {
     }
 }
 
-public final class HAWebSocketClient: HAWebSocketClientProtocol {
+private final class HAWebSocketSendSequencer {
+    private let lock = NSLock()
+    private var nextSendID = 1
+    private var currentSendID: Int?
+    private var cancelledIDs: Set<Int> = []
+    private var waiters: [Int: CheckedContinuation<Bool, Never>] = [:]
+
+    func acquire(id: Int) async -> Bool {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            let immediateResult: Bool?
+            if id < nextSendID || cancelledIDs.remove(id) != nil {
+                immediateResult = false
+            } else if currentSendID == nil, id == nextSendID {
+                currentSendID = id
+                immediateResult = true
+            } else {
+                waiters[id] = continuation
+                immediateResult = nil
+            }
+            lock.unlock()
+            if let immediateResult = immediateResult {
+                continuation.resume(returning: immediateResult)
+            }
+        }
+    }
+
+    func completeSend(id: Int) {
+        lock.lock()
+        guard currentSendID == id else {
+            lock.unlock()
+            return
+        }
+        currentSendID = nil
+        nextSendID = id + 1
+        let nextWaiter = advanceLocked()
+        lock.unlock()
+        nextWaiter?.resume(returning: true)
+    }
+
+    func cancel(id: Int) {
+        lock.lock()
+        guard id >= nextSendID, currentSendID != id else {
+            lock.unlock()
+            return
+        }
+        cancelledIDs.insert(id)
+        let cancelledWaiter = waiters.removeValue(forKey: id)
+        let nextWaiter = advanceLocked()
+        lock.unlock()
+        cancelledWaiter?.resume(returning: false)
+        nextWaiter?.resume(returning: true)
+    }
+
+    private func advanceLocked() -> CheckedContinuation<Bool, Never>? {
+        guard currentSendID == nil else {
+            return nil
+        }
+        while cancelledIDs.remove(nextSendID) != nil {
+            nextSendID += 1
+        }
+        if let waiter = waiters.removeValue(forKey: nextSendID) {
+            currentSendID = nextSendID
+            return waiter
+        }
+        return nil
+    }
+}
+
+public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReconnectNotifying {
     public private(set) var connectionState: HAWebSocketConnectionState = .disconnected
+    public var onReconnect: (() -> Void)? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedReconnectHandler
+        }
+        set {
+            lock.lock()
+            storedReconnectHandler = newValue
+            lock.unlock()
+        }
+    }
 
     private let auth: HAAuth
     private let transport: HAWebSocketTransport
     private let logger: Logger?
     private let pingConfiguration: HAPingConfiguration?
+    private let sendSequencer = HAWebSocketSendSequencer()
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private let lock = NSLock()
@@ -132,9 +225,25 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol {
     private var nextRequestID = 1
     private var pendingRequests: [Int: CheckedContinuation<HAJSONValue, Error>] = [:]
     private var subscriptions: [Int: HAAnySubscriptionHandler] = [:]
+    private var serverSubscriptionIDs: [Int: Int] = [:]
     private var receiveTask: Task<Void, Never>?
     private var pingTask: Task<Void, Never>?
     private var shouldReconnect = true
+    private var hasConnectedSuccessfully = false
+    private var storedReconnectHandler: (() -> Void)?
+    private var storedRequestReservationObserver: ((Int) -> Void)?
+    var requestReservationObserver: ((Int) -> Void)? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedRequestReservationObserver
+        }
+        set {
+            lock.lock()
+            storedRequestReservationObserver = newValue
+            lock.unlock()
+        }
+    }
 
     public init(
         auth: HAAuth,
@@ -149,6 +258,7 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol {
     }
 
     public func connect() async throws {
+        let isReconnect = hasConnectedSuccessfully
         shouldReconnect = true
         setConnectionState(.connecting)
         try await transport.connect(url: auth.webSocketURL(), headers: [:])
@@ -156,7 +266,12 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol {
         try await authenticate()
         setConnectionState(.connected)
         startReceiveLoop()
+        try await replaySubscriptions()
         startPingLoop()
+        hasConnectedSuccessfully = true
+        if isReconnect {
+            reconnectHandler()?()
+        }
     }
 
     public func disconnect() async {
@@ -184,8 +299,9 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol {
     }
 
     public func callWS<T: Decodable, Message: Encodable>(_ message: Message) async throws -> T {
+        let messageObject = try encodeMessageObject(message)
         let id = reserveRequestID()
-        let outbound = try encodeOutboundMessage(message, id: id)
+        let outbound = try encodeOutboundMessage(messageObject, id: id)
         let resultValue = try await sendRequest(id: id, outbound: outbound)
         return try decode(T.self, from: resultValue)
     }
@@ -194,9 +310,45 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol {
         _ message: Message,
         onEvent: @escaping (T) -> Void
     ) async throws -> HASubscription {
+        let messageObject = try encodeMessageObject(message)
+        return try await subscribe(
+            buildMessageObject: { messageObject },
+            onReplay: {},
+            onEvent: onEvent
+        )
+    }
+
+    public func subscribe<T: Decodable>(
+        buildMessage: @escaping () -> HAWebSocketRequest,
+        onReplay: @escaping () -> Void,
+        onEvent: @escaping (T) -> Void
+    ) async throws -> HASubscription {
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        return try await subscribe(
+            buildMessageObject: {
+                let data = try encoder.encode(buildMessage())
+                return try decoder.decode([String: HAJSONValue].self, from: data)
+            },
+            onReplay: onReplay,
+            onEvent: onEvent
+        )
+    }
+
+    private func subscribe<T: Decodable>(
+        buildMessageObject: @escaping () throws -> [String: HAJSONValue],
+        onReplay: @escaping () -> Void,
+        onEvent: @escaping (T) -> Void
+    ) async throws -> HASubscription {
+        let messageObject = try validatedMessageObject(buildMessageObject())
         let id = reserveRequestID()
-        let outbound = try encodeOutboundMessage(message, id: id)
-        registerSubscription(id: id) { [weak self] value in
+        let outbound = try encodeOutboundMessage(messageObject, id: id)
+        registerSubscription(
+            logicalID: id,
+            serverID: id,
+            buildMessageObject: buildMessageObject,
+            onReplay: onReplay
+        ) { [weak self] value in
             guard let self = self else {
                 return
             }
@@ -215,10 +367,10 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol {
             let ackValue = try await sendRequest(id: id, outbound: outbound)
             let _: HAEmptyResponse = try decode(HAEmptyResponse.self, from: ackValue)
             return HASubscription(id: id) { [weak self] in
-                self?.removeSubscription(id: id)
+                self?.removeSubscription(logicalID: id)
             }
         } catch {
-            removeSubscription(id: id)
+            removeSubscription(logicalID: id)
             throw error
         }
     }
@@ -356,10 +508,25 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol {
 
     private func sendRequest(id: Int, outbound: String) async throws -> HAJSONValue {
         try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
+            return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HAJSONValue, Error>) in
                 registerPendingRequest(id: id, continuation: continuation)
+                if Task.isCancelled {
+                    completePendingRequest(id: id, result: .failure(HAWebSocketClientError.disconnected))
+                    Task {
+                        self.sendSequencer.cancel(id: id)
+                    }
+                    return
+                }
                 Task { [weak self] in
                     guard let self = self else {
+                        return
+                    }
+                    let acquired = await self.sendSequencer.acquire(id: id)
+                    guard acquired else {
+                        return
+                    }
+                    guard self.hasPendingRequest(id: id) else {
+                        self.sendSequencer.completeSend(id: id)
                         return
                     }
                     do {
@@ -367,16 +534,35 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol {
                     } catch {
                         self.completePendingRequest(id: id, result: .failure(error))
                     }
+                    self.sendSequencer.completeSend(id: id)
                 }
             }
         } onCancel: {
             self.completePendingRequest(id: id, result: .failure(HAWebSocketClientError.disconnected))
+            Task {
+                self.sendSequencer.cancel(id: id)
+            }
         }
     }
 
-    private func encodeOutboundMessage<Message: Encodable>(_ message: Message, id: Int) throws -> String {
+    private func encodeMessageObject<Message: Encodable>(_ message: Message) throws -> [String: HAJSONValue] {
         let data = try encoder.encode(message)
-        var object = try decoder.decode([String: HAJSONValue].self, from: data)
+        return try validatedMessageObject(
+            decoder.decode([String: HAJSONValue].self, from: data)
+        )
+    }
+
+    private func validatedMessageObject(
+        _ messageObject: [String: HAJSONValue]
+    ) throws -> [String: HAJSONValue] {
+        guard messageObject["type"] != nil else {
+            throw HAWebSocketClientError.invalidOutboundMessage
+        }
+        return messageObject
+    }
+
+    private func encodeOutboundMessage(_ messageObject: [String: HAJSONValue], id: Int) throws -> String {
+        var object = messageObject
         guard object["type"] != nil else {
             throw HAWebSocketClientError.invalidOutboundMessage
         }
@@ -398,9 +584,11 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol {
 
     private func reserveRequestID() -> Int {
         lock.lock()
-        defer { lock.unlock() }
         let id = nextRequestID
         nextRequestID += 1
+        let observer = storedRequestReservationObserver
+        lock.unlock()
+        observer?(id)
         return id
     }
 
@@ -417,6 +605,12 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol {
         continuation?.resume(with: result)
     }
 
+    private func hasPendingRequest(id: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return pendingRequests[id] != nil
+    }
+
     private func failAllPending(with error: Error) {
         lock.lock()
         let pending = pendingRequests
@@ -427,29 +621,82 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol {
         }
     }
 
-    private func registerSubscription(id: Int, handler: @escaping (HAJSONValue) -> Void) {
+    private func registerSubscription(
+        logicalID: Int,
+        serverID: Int,
+        buildMessageObject: @escaping () throws -> [String: HAJSONValue],
+        onReplay: @escaping () -> Void,
+        handler: @escaping (HAJSONValue) -> Void
+    ) {
         lock.lock()
-        subscriptions[id] = HAAnySubscriptionHandler(handleValue: handler)
+        subscriptions[logicalID] = HAAnySubscriptionHandler(
+            buildMessageObject: buildMessageObject,
+            onReplay: onReplay,
+            handleValue: handler
+        )
+        serverSubscriptionIDs[serverID] = logicalID
         lock.unlock()
     }
 
     private func dispatchSubscriptionEvent(id: Int, event: HAJSONValue) {
         lock.lock()
-        let handler = subscriptions[id]
+        let handler = serverSubscriptionIDs[id].flatMap { subscriptions[$0] }
         lock.unlock()
         handler?.handle(event)
     }
 
-    private func removeSubscription(id: Int) {
+    private func removeSubscription(logicalID: Int) {
         lock.lock()
-        subscriptions.removeValue(forKey: id)
+        subscriptions.removeValue(forKey: logicalID)
+        serverSubscriptionIDs = serverSubscriptionIDs.filter { $0.value != logicalID }
         lock.unlock()
     }
 
     private func removeAllSubscriptions() {
         lock.lock()
         subscriptions.removeAll()
+        serverSubscriptionIDs.removeAll()
         lock.unlock()
+    }
+
+    private func replaySubscriptions() async throws {
+        lock.lock()
+        let logicalIDs = Array(subscriptions.keys).sorted()
+        serverSubscriptionIDs.removeAll()
+        lock.unlock()
+
+        for logicalID in logicalIDs {
+            lock.lock()
+            let handler = subscriptions[logicalID]
+            lock.unlock()
+            guard let handler = handler else {
+                continue
+            }
+
+            handler.onReplay()
+            let messageObject = try validatedMessageObject(handler.buildMessageObject())
+            let serverID = reserveRequestID()
+
+            lock.lock()
+            let isActive = subscriptions[logicalID] === handler
+            if isActive {
+                serverSubscriptionIDs[serverID] = logicalID
+            }
+            lock.unlock()
+
+            guard isActive else {
+                sendSequencer.cancel(id: serverID)
+                continue
+            }
+
+            let outbound = try encodeOutboundMessage(messageObject, id: serverID)
+            let ackValue = try await sendRequest(id: serverID, outbound: outbound)
+            let _: HAEmptyResponse = try decode(HAEmptyResponse.self, from: ackValue)
+        }
+    }
+
+    private func reconnectHandler() -> (() -> Void)? {
+        onReconnect
     }
 
     private func setConnectionState(_ state: HAWebSocketConnectionState) {

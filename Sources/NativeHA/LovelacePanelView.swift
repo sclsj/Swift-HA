@@ -30,18 +30,22 @@ struct LovelacePanelView: View {
     var body: some View {
         Group {
             if let stateStore = stateStore, let registryStore = registryStore {
-                StoreReader(stateStore: stateStore, registryStore: registryStore) { displayContext, userName in
-                    rootView(displayContext: displayContext, userName: userName)
+                StoreReader(stateStore: stateStore, registryStore: registryStore) { displayContext, userName, userID in
+                    rootView(displayContext: displayContext, userName: userName, userID: userID)
                 }
             } else {
-                rootView(displayContext: .empty, userName: "Home Assistant")
+                rootView(displayContext: .empty, userName: "Home Assistant", userID: nil)
             }
         }
         .task(id: loadID) {
+            guard appState.connectionState == .connected else {
+                return
+            }
             await store.load(
                 dashboardPath: dashboardPath,
                 viewPath: viewPath,
-                viewIndex: viewIndex
+                viewIndex: viewIndex,
+                userID: stateStore?.currentUser?.id
             )
         }
         .onChange(of: viewPath ?? "") { newValue in
@@ -69,13 +73,14 @@ struct LovelacePanelView: View {
         }
     }
 
-    private func rootView(displayContext: EntityDisplayContext, userName: String) -> some View {
+    private func rootView(displayContext: EntityDisplayContext, userName: String, userID: String?) -> some View {
         LovelaceRootView(
             store: store,
             selectedDashboardPath: dashboardPath,
             displayContext: displayContext,
             templateSubscriber: markdownTemplateSubscriber,
             userName: userName,
+            userID: userID,
             onSelectDashboard: { dashboard in
                 appState.navigate(to: .dashboard(urlPath: dashboard.path))
             },
@@ -130,12 +135,12 @@ struct LovelacePanelView: View {
 private struct StoreReader<Content: View>: View {
     @ObservedObject var stateStore: HAStateStore
     @ObservedObject var registryStore: HARegistryStore
-    let content: (EntityDisplayContext, String) -> Content
+    let content: (EntityDisplayContext, String, String?) -> Content
 
     init(
         stateStore: HAStateStore,
         registryStore: HARegistryStore,
-        @ViewBuilder content: @escaping (EntityDisplayContext, String) -> Content
+        @ViewBuilder content: @escaping (EntityDisplayContext, String, String?) -> Content
     ) {
         self.stateStore = stateStore
         self.registryStore = registryStore
@@ -149,12 +154,14 @@ private struct StoreReader<Content: View>: View {
                 config: stateStore.config,
                 registryEntries: registryStore.entities
             ),
-            userName
+            userName,
+            stateStore.currentUser?.id
         )
     }
 
     private var userName: String {
-        stateStore.userData["user"]?.objectValue?["name"]?.stringValue
+        stateStore.currentUser?.name
+            ?? stateStore.userData["user"]?.objectValue?["name"]?.stringValue
             ?? stateStore.userData["name"]?.stringValue
             ?? "Home Assistant"
     }

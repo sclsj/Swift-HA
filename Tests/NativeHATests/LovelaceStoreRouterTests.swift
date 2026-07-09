@@ -5,6 +5,76 @@ import XCTest
 final class LovelaceStoreRouterTests: XCTestCase {
     private let snapshotDirectory = "/Users/jin/Documents/HA/ha_frontend_spec/snapshots"
 
+    func testViewVisibilityHandlesBooleansAndUserRestrictions() {
+        let router = LovelaceRouter()
+        let omitted = LovelaceViewConfig(path: "omitted")
+        let enabled = LovelaceViewConfig(path: "enabled", visible: .bool(true))
+        let disabled = LovelaceViewConfig(path: "disabled", visible: .bool(false))
+        let restricted = LovelaceViewConfig(
+            path: "restricted",
+            visible: .array([.object(["user": .string("user-a")])])
+        )
+
+        XCTAssertTrue(router.isVisible(omitted))
+        XCTAssertTrue(router.isVisible(enabled))
+        XCTAssertFalse(router.isVisible(disabled))
+        XCTAssertTrue(router.isVisible(restricted, userID: "user-a"))
+        XCTAssertFalse(router.isVisible(restricted, userID: "user-b"))
+        XCTAssertFalse(router.isVisible(restricted, userID: nil))
+    }
+
+    func testRoutingDoesNotSelectRestrictedViewWithoutMatchingUser() {
+        let router = LovelaceRouter()
+        let config = LovelaceConfig(
+            views: [
+                LovelaceViewConfig(
+                    path: "private",
+                    visible: .array([.object(["user": .string("user-a")])])
+                ),
+                LovelaceViewConfig(path: "public")
+            ],
+            raw: .object([:])
+        )
+
+        XCTAssertEqual(
+            router.route(
+                dashboardPath: "/lovelace",
+                config: config,
+                requestedViewPath: "private",
+                userID: nil
+            ).selectedViewPath,
+            "public"
+        )
+        XCTAssertEqual(
+            router.route(
+                dashboardPath: "/lovelace",
+                config: config,
+                requestedViewPath: "private",
+                userID: "user-a"
+            ).selectedViewPath,
+            "private"
+        )
+    }
+
+    @MainActor
+    func testStorePassesCurrentUserToRouting() async throws {
+        let store = LovelaceStore(configProvider: RestrictedViewConfigProvider())
+
+        await store.load(
+            dashboardPath: "/lovelace",
+            viewPath: "private",
+            userID: "user-b"
+        )
+        XCTAssertEqual(try XCTUnwrap(store.state.loadedDashboard).selectedView?.path, "public")
+
+        await store.load(
+            dashboardPath: "/lovelace",
+            viewPath: "private",
+            userID: "user-a"
+        )
+        XCTAssertEqual(try XCTUnwrap(store.state.loadedDashboard).selectedView?.path, "private")
+    }
+
     @MainActor
     func testStoreLoadsExpectedDashboardConfigsThroughMockProvider() async throws {
         let provider = SnapshotLovelaceConfigProvider(snapshotDirectory: snapshotDirectory)
@@ -220,5 +290,28 @@ private final class MockLovelaceUpdateSubscription: LovelaceUpdateSubscription {
 
     func cancel() {
         isCancelled = true
+    }
+}
+
+private struct RestrictedViewConfigProvider: LovelaceConfigProvider {
+    func dashboardList() async throws -> [LovelaceDashboardReference] {
+        [LovelaceDashboardReference(path: "/lovelace", title: "Overview")]
+    }
+
+    func configuration(for dashboardPath: String) async throws -> LovelaceConfiguration {
+        let config = LovelaceConfig(
+            views: [
+                LovelaceViewConfig(
+                    path: "private",
+                    visible: .array([.object(["user": .string("user-a")])])
+                ),
+                LovelaceViewConfig(path: "public")
+            ],
+            raw: .object([:])
+        )
+        return LovelaceConfiguration(
+            dashboardPath: dashboardPath,
+            config: .config(config)
+        )
     }
 }
