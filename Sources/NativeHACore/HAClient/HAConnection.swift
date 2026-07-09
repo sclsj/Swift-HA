@@ -1,6 +1,43 @@
 import Foundation
 
-public final class HAConnection: HAClientProtocol {
+public protocol HAReconnectSubscription {
+    func cancel()
+}
+
+public protocol HAReconnectEventSource {
+    func subscribeReconnects(onReconnect: @escaping () -> Void) -> HAReconnectSubscription
+}
+
+public struct PlaceholderHAReconnectEventSource: HAReconnectEventSource {
+    public init() {}
+
+    public func subscribeReconnects(onReconnect: @escaping () -> Void) -> HAReconnectSubscription {
+        HAReconnectObservation {}
+    }
+}
+
+public final class HAReconnectObservation: HAReconnectSubscription {
+    private let lock = NSLock()
+    private var cancellationHandler: (() -> Void)?
+
+    init(cancellationHandler: @escaping () -> Void) {
+        self.cancellationHandler = cancellationHandler
+    }
+
+    public func cancel() {
+        lock.lock()
+        let handler = cancellationHandler
+        cancellationHandler = nil
+        lock.unlock()
+        handler?()
+    }
+
+    deinit {
+        cancel()
+    }
+}
+
+public final class HAConnection: HAClientProtocol, HAReconnectEventSource {
     public let stateStore: HAStateStore
     public let registryStore: HARegistryStore
 
@@ -10,6 +47,8 @@ public final class HAConnection: HAClientProtocol {
     private let credentialProvider: CredentialProvider?
     private let logger: Logger?
     private var subscriptions: [HASubscription] = []
+    private let reconnectObserversLock = NSLock()
+    private var reconnectObservers: [UUID: () -> Void] = [:]
 
     public init(
         credentialProvider: CredentialProvider,
@@ -62,6 +101,16 @@ public final class HAConnection: HAClientProtocol {
         async let stateRefresh: Void = stateStore.refresh(using: client)
         async let registryRefresh: Void = registryStore.refresh(using: client)
         _ = try await (stateRefresh, registryRefresh)
+    }
+
+    public func subscribeReconnects(onReconnect: @escaping () -> Void) -> HAReconnectSubscription {
+        let id = UUID()
+        reconnectObserversLock.lock()
+        reconnectObservers[id] = onReconnect
+        reconnectObserversLock.unlock()
+        return HAReconnectObservation { [weak self] in
+            self?.removeReconnectObserver(id: id)
+        }
     }
 
     public var storeSummary: HomeAssistantStores {
@@ -168,6 +217,7 @@ public final class HAConnection: HAClientProtocol {
 
     private func installReconnectRefresh(on client: HAWebSocketClientProtocol) {
         (client as? HAWebSocketReconnectNotifying)?.onReconnect = { [weak self] in
+            self?.notifyReconnectObservers()
             Task { [weak self] in
                 guard let self = self else {
                     return
@@ -182,6 +232,19 @@ public final class HAConnection: HAClientProtocol {
                 }
             }
         }
+    }
+
+    private func notifyReconnectObservers() {
+        reconnectObserversLock.lock()
+        let observers = Array(reconnectObservers.values)
+        reconnectObserversLock.unlock()
+        observers.forEach { $0() }
+    }
+
+    private func removeReconnectObserver(id: UUID) {
+        reconnectObserversLock.lock()
+        reconnectObservers.removeValue(forKey: id)
+        reconnectObserversLock.unlock()
     }
 
     private func subscribeRegistryRefresh(

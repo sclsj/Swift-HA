@@ -300,8 +300,7 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
 
     public func callWS<T: Decodable, Message: Encodable>(_ message: Message) async throws -> T {
         let messageObject = try encodeMessageObject(message)
-        let id = reserveRequestID()
-        let outbound = try encodeOutboundMessage(messageObject, id: id)
+        let (id, outbound) = try reserveAndEncodeOutboundMessage(messageObject)
         let resultValue = try await sendRequest(id: id, outbound: outbound)
         return try decode(T.self, from: resultValue)
     }
@@ -340,9 +339,8 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
         onReplay: @escaping () -> Void,
         onEvent: @escaping (T) -> Void
     ) async throws -> HASubscription {
-        let messageObject = try validatedMessageObject(buildMessageObject())
-        let id = reserveRequestID()
-        let outbound = try encodeOutboundMessage(messageObject, id: id)
+        let messageObject = try buildMessageObject()
+        let (id, outbound) = try reserveAndEncodeOutboundMessage(messageObject)
         registerSubscription(
             logicalID: id,
             serverID: id,
@@ -367,10 +365,10 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
             let ackValue = try await sendRequest(id: id, outbound: outbound)
             let _: HAEmptyResponse = try decode(HAEmptyResponse.self, from: ackValue)
             return HASubscription(id: id) { [weak self] in
-                self?.removeSubscription(logicalID: id)
+                self?.cancelSubscription(logicalID: id)
             }
         } catch {
-            removeSubscription(logicalID: id)
+            cancelSubscription(logicalID: id)
             throw error
         }
     }
@@ -547,9 +545,7 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
 
     private func encodeMessageObject<Message: Encodable>(_ message: Message) throws -> [String: HAJSONValue] {
         let data = try encoder.encode(message)
-        return try validatedMessageObject(
-            decoder.decode([String: HAJSONValue].self, from: data)
-        )
+        return try decoder.decode([String: HAJSONValue].self, from: data)
     }
 
     private func validatedMessageObject(
@@ -572,6 +568,18 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
             throw HAWebSocketClientError.invalidOutboundMessage
         }
         return outbound
+    }
+
+    private func reserveAndEncodeOutboundMessage(
+        _ messageObject: [String: HAJSONValue]
+    ) throws -> (id: Int, outbound: String) {
+        let id = reserveRequestID()
+        do {
+            return (id, try encodeOutboundMessage(messageObject, id: id))
+        } catch {
+            sendSequencer.cancel(id: id)
+            throw error
+        }
     }
 
     private func decode<T: Decodable>(_ type: T.Type, from value: HAJSONValue) throws -> T {
@@ -645,11 +653,63 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
         handler?.handle(event)
     }
 
-    private func removeSubscription(logicalID: Int) {
+    private func cancelSubscription(logicalID: Int) {
         lock.lock()
-        subscriptions.removeValue(forKey: logicalID)
+        let wasActive = subscriptions.removeValue(forKey: logicalID) != nil
+        let serverIDs = serverSubscriptionIDs.compactMap { serverID, mappedLogicalID in
+            mappedLogicalID == logicalID ? serverID : nil
+        }
         serverSubscriptionIDs = serverSubscriptionIDs.filter { $0.value != logicalID }
+        let shouldUnsubscribe = wasActive && connectionState == .connected
         lock.unlock()
+
+        guard shouldUnsubscribe else {
+            return
+        }
+        for serverID in serverIDs.sorted() {
+            sendUnsubscribe(serverID: serverID)
+        }
+    }
+
+    private func sendUnsubscribe(serverID: Int) {
+        let message = HAWebSocketRequest(
+            type: "unsubscribe_events",
+            payload: ["subscription": .integer(serverID)]
+        )
+
+        let messageObject: [String: HAJSONValue]
+        let reservedMessage: (id: Int, outbound: String)
+        do {
+            messageObject = try encodeMessageObject(message)
+            reservedMessage = try reserveAndEncodeOutboundMessage(messageObject)
+        } catch {
+            logger?.warning(
+                "Failed to encode Home Assistant unsubscribe request",
+                metadata: [
+                    "subscription": String(serverID),
+                    "error": String(describing: error)
+                ]
+            )
+            return
+        }
+
+        Task { [self] in
+            do {
+                let value = try await sendRequest(
+                    id: reservedMessage.id,
+                    outbound: reservedMessage.outbound
+                )
+                let _: HAEmptyResponse = try decode(HAEmptyResponse.self, from: value)
+            } catch {
+                logger?.debug(
+                    "Home Assistant unsubscribe request did not complete",
+                    metadata: [
+                        "subscription": String(serverID),
+                        "error": String(describing: error)
+                    ]
+                )
+            }
+        }
     }
 
     private func removeAllSubscriptions() {
@@ -674,8 +734,8 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
             }
 
             handler.onReplay()
-            let messageObject = try validatedMessageObject(handler.buildMessageObject())
-            let serverID = reserveRequestID()
+            let messageObject = try handler.buildMessageObject()
+            let (serverID, outbound) = try reserveAndEncodeOutboundMessage(messageObject)
 
             lock.lock()
             let isActive = subscriptions[logicalID] === handler
@@ -689,7 +749,6 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
                 continue
             }
 
-            let outbound = try encodeOutboundMessage(messageObject, id: serverID)
             let ackValue = try await sendRequest(id: serverID, outbound: outbound)
             let _: HAEmptyResponse = try decode(HAEmptyResponse.self, from: ackValue)
         }

@@ -84,6 +84,61 @@ final class HAWebSocketClientTests: XCTestCase {
         await client.disconnect()
     }
 
+    func testActiveSubscriptionCancellationSendsUnsubscribeWithServerIDAndIsIdempotent() async throws {
+        let (client, transport) = try await makeConnectedClient()
+        let subscriptionTask = Task { () -> HASubscription in
+            try await client.subscribe(
+                HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("test_event")])
+            ) { (_: HAJSONValue) in }
+        }
+
+        try await waitForNumberedRequestCount(1, transport: transport)
+        let subscriptionID = try XCTUnwrap(transport.numberedSentObjects()[0]["id"]?.integerValue)
+        transport.enqueue(resultMessage(id: subscriptionID))
+        let subscription = try await subscriptionTask.value
+
+        subscription.cancel()
+        subscription.cancel()
+
+        try await waitForNumberedRequestCount(2, transport: transport)
+        let unsubscribe = try transport.numberedSentObjects()[1]
+        XCTAssertEqual(unsubscribe["type"], .string("unsubscribe_events"))
+        XCTAssertEqual(unsubscribe["subscription"]?.integerValue, subscriptionID)
+        try await Task.sleep(nanoseconds: 25_000_000)
+        XCTAssertEqual(try transport.numberedSentObjects().count, 2)
+
+        let unsubscribeID = try XCTUnwrap(unsubscribe["id"]?.integerValue)
+        transport.enqueue(resultMessage(id: unsubscribeID))
+        await client.disconnect()
+    }
+
+    func testCancellationBeforeSubscribeResultDoesNotLeakServerSubscription() async throws {
+        let (client, transport) = try await makeConnectedClient()
+        let subscriptionTask = Task { () -> HASubscription in
+            try await client.subscribe(
+                HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("test_event")])
+            ) { (_: HAJSONValue) in }
+        }
+
+        try await waitForNumberedRequestCount(1, transport: transport)
+        let subscriptionID = try XCTUnwrap(transport.numberedSentObjects()[0]["id"]?.integerValue)
+        subscriptionTask.cancel()
+
+        try await waitForNumberedRequestCount(2, transport: transport)
+        let unsubscribe = try transport.numberedSentObjects()[1]
+        XCTAssertEqual(unsubscribe["type"], .string("unsubscribe_events"))
+        XCTAssertEqual(unsubscribe["subscription"]?.integerValue, subscriptionID)
+
+        transport.enqueue(resultMessage(id: subscriptionID))
+        let unsubscribeID = try XCTUnwrap(unsubscribe["id"]?.integerValue)
+        transport.enqueue(resultMessage(id: unsubscribeID))
+        guard case .failure = await subscriptionTask.result else {
+            return XCTFail("Expected the cancelled subscription setup to fail.")
+        }
+
+        await client.disconnect()
+    }
+
     func testReconnectReplaysActiveSubscriptionWithFreshServerIDOnce() async throws {
         let (client, transport) = try await makeConnectedClient()
         let callback = expectation(description: "replayed subscription callback")
@@ -134,7 +189,14 @@ final class HAWebSocketClientTests: XCTestCase {
         wait(for: [callback], timeout: 1.0)
         XCTAssertEqual(receivedValues.value(), ["fresh"])
 
+        let beforeCancelCount = try transport.numberedSentObjects().count
         subscription.cancel()
+
+        try await waitForNumberedRequestCount(beforeCancelCount + 1, transport: transport)
+        let unsubscribe = try transport.numberedSentObjects()[beforeCancelCount]
+        XCTAssertEqual(unsubscribe["type"], .string("unsubscribe_events"))
+        XCTAssertEqual(unsubscribe["subscription"]?.integerValue, replayID)
+
         await client.disconnect()
     }
 
@@ -151,11 +213,50 @@ final class HAWebSocketClientTests: XCTestCase {
         transport.enqueue(resultMessage(id: initialID))
         let subscription = try await subscriptionTask.value
         subscription.cancel()
+        try await waitForNumberedRequestCount(2, transport: transport)
+        let unsubscribe = try transport.numberedSentObjects()[1]
+        XCTAssertEqual(unsubscribe["subscription"]?.integerValue, initialID)
+        transport.enqueue(resultMessage(id: try XCTUnwrap(unsubscribe["id"]?.integerValue)))
 
         transport.queueAuthenticationForNextConnection()
         try await client.reconnect()
 
-        XCTAssertEqual(try transport.numberedSentObjects().count, 1)
+        XCTAssertEqual(try transport.numberedSentObjects().count, 2)
+        await client.disconnect()
+    }
+
+    func testOutboundEncodingFailureDoesNotWedgeLaterRequestOrdering() async throws {
+        let (client, transport) = try await makeConnectedClient()
+        let firstReserved = expectation(description: "invalid request reserved")
+        let secondReserved = expectation(description: "valid request reserved")
+        client.requestReservationObserver = { id in
+            if id == 1 {
+                firstReserved.fulfill()
+            } else if id == 2 {
+                secondReserved.fulfill()
+            }
+        }
+
+        do {
+            let _: HAEmptyResponse = try await client.callWS(MissingTypeRequest(value: "invalid"))
+            XCTFail("Expected outbound encoding to reject a request without a type.")
+        } catch HAWebSocketClientError.invalidOutboundMessage {
+            // Expected.
+        }
+        wait(for: [firstReserved], timeout: 1.0)
+
+        let validTask = Task { () -> HAEmptyResponse in
+            try await client.callWS(HAWebSocketRequest(type: "valid_request"))
+        }
+        wait(for: [secondReserved], timeout: 1.0)
+        try await waitForNumberedRequestCount(1, transport: transport)
+
+        let validRequest = try transport.numberedSentObjects()[0]
+        XCTAssertEqual(validRequest["id"]?.integerValue, 2)
+        XCTAssertEqual(validRequest["type"], .string("valid_request"))
+        transport.enqueue(resultMessage(id: 2))
+        _ = try await validTask.value
+
         await client.disconnect()
     }
 
@@ -222,6 +323,28 @@ final class HAWebSocketClientTests: XCTestCase {
         await client.disconnect()
     }
 
+    func testHAConnectionReconnectObserverIsCalledAndCanBeCancelled() async throws {
+        let client = MockReconnectClient()
+        let connection = HAConnection(client: client)
+
+        let observerCalled = LockedValue<Int>(0)
+        let observation = connection.subscribeReconnects {
+            observerCalled.mutate { $0 += 1 }
+        }
+
+        do {
+            try await connection.connect()
+        } catch {}
+
+        client.onReconnect?()
+        XCTAssertEqual(observerCalled.value(), 1)
+
+        observation.cancel()
+
+        client.onReconnect?()
+        XCTAssertEqual(observerCalled.value(), 1)
+    }
+
     private func makeConnectedClient() async throws -> (HAWebSocketClient, MockWebSocketTransport) {
         let transport = MockWebSocketTransport()
         transport.enqueue("""
@@ -270,6 +393,10 @@ final class HAWebSocketClientTests: XCTestCase {
         {"id":\(id),"type":"result","success":true,"result":null}
         """
     }
+}
+
+private struct MissingTypeRequest: Encodable {
+    var value: String
 }
 
 private extension HAJSONValue {
@@ -442,5 +569,33 @@ private final class LockedValue<Value> {
         lock.lock()
         mutation(&storage)
         lock.unlock()
+    }
+}
+
+private final class MockReconnectClient: HAWebSocketClientProtocol, HAWebSocketReconnectNotifying {
+    var onReconnect: (() -> Void)?
+
+    struct IntentionalError: Error {}
+
+    func connect() async throws { throw IntentionalError() }
+    func disconnect() async {}
+
+    func callWS<T: Decodable, Message: Encodable>(_ message: Message) async throws -> T {
+        throw IntentionalError()
+    }
+
+    func subscribe<T: Decodable, Message: Encodable>(
+        _ message: Message,
+        onEvent: @escaping (T) -> Void
+    ) async throws -> HASubscription {
+        throw IntentionalError()
+    }
+
+    func subscribe<T: Decodable>(
+        buildMessage: @escaping () -> HAWebSocketRequest,
+        onReplay: @escaping () -> Void,
+        onEvent: @escaping (T) -> Void
+    ) async throws -> HASubscription {
+        throw IntentionalError()
     }
 }
