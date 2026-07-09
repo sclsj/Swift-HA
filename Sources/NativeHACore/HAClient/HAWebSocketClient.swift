@@ -228,6 +228,7 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
     private var serverSubscriptionIDs: [Int: Int] = [:]
     private var receiveTask: Task<Void, Never>?
     private var pingTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
     private var shouldReconnect = true
     private var hasConnectedSuccessfully = false
     private var storedReconnectHandler: (() -> Void)?
@@ -278,8 +279,10 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
         shouldReconnect = false
         receiveTask?.cancel()
         pingTask?.cancel()
+        reconnectTask?.cancel()
         receiveTask = nil
         pingTask = nil
+        reconnectTask = nil
         transport.disconnect()
         failAllPending(with: HAWebSocketClientError.disconnected)
         removeAllSubscriptions()
@@ -293,6 +296,7 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
         setConnectionState(.reconnecting)
         receiveTask?.cancel()
         pingTask?.cancel()
+        // DO NOT cancel reconnectTask here, as reconnect() may be called FROM reconnectTask.
         transport.disconnect()
         failAllPending(with: HAWebSocketClientError.disconnected)
         try await connect()
@@ -417,10 +421,11 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
                     self.setConnectionState(.failed(String(describing: error)))
                     self.failAllPending(with: error)
                     if self.shouldReconnect {
-                        do {
-                            try await self.reconnect(force: false)
-                        } catch {
-                            self.logger?.error("Home Assistant WebSocket reconnect failed", metadata: ["error": String(describing: error)])
+                        if let task = self.reconnectTask, !task.isCancelled {
+                            task.cancel()
+                        }
+                        self.reconnectTask = Task { [weak self] in
+                            await self?.retryReconnectUntilSuccessful()
                         }
                     }
                     return
@@ -457,6 +462,26 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
                     }
                     return
                 }
+            }
+        }
+    }
+
+    private func retryReconnectUntilSuccessful() async {
+        var backoffSeconds: TimeInterval = 0.1
+        let maxBackoffSeconds: TimeInterval = 30.0
+
+        while !Task.isCancelled && self.shouldReconnect {
+            do {
+                try await self.reconnect(force: false)
+                return
+            } catch {
+                self.logger?.warning("Home Assistant WebSocket reconnect attempt failed, retrying in \(backoffSeconds)s", metadata: ["error": String(describing: error)])
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(backoffSeconds * 1_000_000_000))
+                } catch {
+                    return
+                }
+                backoffSeconds = min(backoffSeconds * 2, maxBackoffSeconds)
             }
         }
     }

@@ -345,6 +345,53 @@ final class HAWebSocketClientTests: XCTestCase {
         XCTAssertEqual(observerCalled.value(), 1)
     }
 
+    func testReceiveLoopFailureRetriesReconnectUntilSuccessful() async throws {
+        let (client, transport) = try await makeConnectedClient()
+
+        let reconnectCallback = expectation(description: "reconnect callback")
+        client.onReconnect = {
+            reconnectCallback.fulfill()
+        }
+
+        // We want the FIRST reconnect attempt to fail.
+        transport.failNextConnection(with: URLError(.notConnectedToInternet))
+
+        // We want the SECOND reconnect attempt to succeed.
+        transport.queueAuthenticationForNextConnection()
+
+        // Trigger the receive loop to fail
+        transport.simulateReceiveFailure(error: URLError(.networkConnectionLost))
+
+        // Wait for the reconnect callback, meaning the loop successfully backed off and retried
+        wait(for: [reconnectCallback], timeout: 2.0)
+
+        XCTAssertEqual(client.connectionState, .connected)
+
+        await client.disconnect()
+    }
+
+    func testExplicitDisconnectStopsRetrying() async throws {
+        let (client, transport) = try await makeConnectedClient()
+
+        // Make reconnect ALWAYS fail
+        transport.failAllFutureConnections(with: URLError(.notConnectedToInternet))
+
+        // Trigger the receive loop to fail
+        transport.simulateReceiveFailure(error: URLError(.networkConnectionLost))
+
+        // Wait a small amount of time to let the retry loop start
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        // Call explicit disconnect
+        await client.disconnect()
+
+        // Wait a bit more to ensure no more retries happen
+        let attemptsAfterDisconnect = transport.connectionAttemptCount
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(transport.connectionAttemptCount, attemptsAfterDisconnect)
+        XCTAssertEqual(client.connectionState, .disconnected)
+    }
+
     private func makeConnectedClient() async throws -> (HAWebSocketClient, MockWebSocketTransport) {
         let transport = MockWebSocketTransport()
         transport.enqueue("""
@@ -421,9 +468,51 @@ private final class MockWebSocketTransport: HAWebSocketTransport {
     private var nextConnectionMessages: [String] = []
     private var blockedSendTypes: Set<String> = []
     private var blockedSendContinuations: [String: [CheckedContinuation<Void, Never>]] = [:]
+    private var connectionErrorToThrow: Error?
+    private var alwaysFailConnections = false
+    private var connectionAttempts = 0
+
+    var connectionAttemptCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return connectionAttempts
+    }
+
+    func failNextConnection(with error: Error) {
+        lock.lock()
+        connectionErrorToThrow = error
+        alwaysFailConnections = false
+        lock.unlock()
+    }
+
+    func failAllFutureConnections(with error: Error) {
+        lock.lock()
+        connectionErrorToThrow = error
+        alwaysFailConnections = true
+        lock.unlock()
+    }
+
+    func simulateReceiveFailure(error: Error) {
+        lock.lock()
+        let pending = receivers
+        receivers.removeAll()
+        lock.unlock()
+
+        for receiver in pending {
+            receiver.resume(throwing: error)
+        }
+    }
 
     func connect(url: URL, headers: [String: String]) async throws {
         lock.lock()
+        connectionAttempts += 1
+        if let error = connectionErrorToThrow {
+            if !alwaysFailConnections {
+                connectionErrorToThrow = nil
+            }
+            lock.unlock()
+            throw error
+        }
         connectedURL = url
         let connectionMessages = nextConnectionMessages
         nextConnectionMessages.removeAll()
