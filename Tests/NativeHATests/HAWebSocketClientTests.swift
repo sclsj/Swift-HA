@@ -519,23 +519,20 @@ final class HAWebSocketClientTests: XCTestCase {
         let receivedB = LockedValue<[String]>([])
 
         let subA = Task { () -> HASubscription in
-            try await client.subscribe(HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("event_a")])) { (event: HAJSONValue) in
-                if let value = event.objectValue?["value"]?.stringValue {
-                    receivedA.mutate { $0.append(value) }
-                }
+            try await client.subscribe(HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("event_a")])) { (event: HAEvent<TestEventPayload>) in
+                receivedA.mutate { $0.append(event.data.value) }
             }
         }
         let subB = Task { () -> HASubscription in
-            try await client.subscribe(HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("event_b")])) { (event: HAJSONValue) in
-                if let value = event.objectValue?["value"]?.stringValue {
-                    receivedB.mutate { $0.append(value) }
-                }
+            try await client.subscribe(HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("event_b")])) { (event: HAEvent<TestEventPayload>) in
+                receivedB.mutate { $0.append(event.data.value) }
             }
         }
 
         try await waitForNumberedRequestCount(2, transport: transport)
-        let reqA = try transport.numberedSentObjects()[0]
-        let reqB = try transport.numberedSentObjects()[1]
+        let initialRequests = try transport.numberedSentObjects()
+        let reqA = try XCTUnwrap(initialRequests.first { $0["event_type"] == .string("event_a") })
+        let reqB = try XCTUnwrap(initialRequests.first { $0["event_type"] == .string("event_b") })
         let idA = try XCTUnwrap(reqA["id"]?.integerValue)
         let idB = try XCTUnwrap(reqB["id"]?.integerValue)
         
@@ -548,14 +545,18 @@ final class HAWebSocketClientTests: XCTestCase {
         let reconnectTask = Task { try await client.reconnect() }
 
         try await waitForNumberedRequestCount(3, transport: transport)
-        let repA = try transport.numberedSentObjects()[2]
-        let newIdA = try XCTUnwrap(repA["id"]?.integerValue)
-        transport.enqueue(resultMessage(id: newIdA))
+        let firstReplay = try transport.numberedSentObjects()[2]
+        let firstReplayID = try XCTUnwrap(firstReplay["id"]?.integerValue)
+        transport.enqueue(resultMessage(id: firstReplayID))
 
         try await waitForNumberedRequestCount(4, transport: transport)
-        let repB = try transport.numberedSentObjects()[3]
+        let replayRequests = Array(try transport.numberedSentObjects()[2...3])
+        let secondReplayID = try XCTUnwrap(replayRequests[1]["id"]?.integerValue)
+        transport.enqueue(resultMessage(id: secondReplayID))
+        let repA = try XCTUnwrap(replayRequests.first { $0["event_type"] == .string("event_a") })
+        let repB = try XCTUnwrap(replayRequests.first { $0["event_type"] == .string("event_b") })
+        let newIdA = try XCTUnwrap(repA["id"]?.integerValue)
         let newIdB = try XCTUnwrap(repB["id"]?.integerValue)
-        transport.enqueue(resultMessage(id: newIdB))
 
         try await reconnectTask.value
 
@@ -593,19 +594,22 @@ final class HAWebSocketClientTests: XCTestCase {
         }
 
         try await waitForNumberedRequestCount(2, transport: transport)
-        let id1 = try XCTUnwrap(transport.numberedSentObjects()[0]["id"]?.integerValue)
-        let id2 = try XCTUnwrap(transport.numberedSentObjects()[1]["id"]?.integerValue)
+        let requests = try transport.numberedSentObjects()
+        let validRequest = try XCTUnwrap(requests.first { $0["event_type"] == .string("valid") })
+        let invalidRequest = try XCTUnwrap(requests.first { $0["event_type"] == .string("invalid") })
+        let validID = try XCTUnwrap(validRequest["id"]?.integerValue)
+        let invalidID = try XCTUnwrap(invalidRequest["id"]?.integerValue)
         
-        transport.enqueue(resultMessage(id: id1))
-        transport.enqueue(resultMessage(id: id2))
+        transport.enqueue(resultMessage(id: validID))
+        transport.enqueue(resultMessage(id: invalidID))
         let sub1 = try await validSub.value
         let sub2 = try await invalidSub.value
 
         transport.enqueue("""
-        {"id":\(id2),"type":"event","event":{"event_type":"invalid","data":{"wrong_key":"foo"},"origin":"LOCAL"}}
+        {"id":\(invalidID),"type":"event","event":{"event_type":"invalid","data":{"wrong_key":"foo"},"origin":"LOCAL"}}
         """)
         transport.enqueue("""
-        {"id":\(id1),"type":"event","event":{"event_type":"valid","data":{"value":"ok"},"origin":"LOCAL"}}
+        {"id":\(validID),"type":"event","event":{"event_type":"valid","data":{"value":"ok"},"origin":"LOCAL"}}
         """)
 
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -621,10 +625,8 @@ final class HAWebSocketClientTests: XCTestCase {
         let received = LockedValue<[String]>([])
 
         let subActive = Task { () -> HASubscription in
-            try await client.subscribe(HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("active")])) { (event: HAJSONValue) in
-                if let value = event.objectValue?["value"]?.stringValue {
-                    received.mutate { $0.append(value) }
-                }
+            try await client.subscribe(HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("active")])) { (event: HAEvent<TestEventPayload>) in
+                received.mutate { $0.append(event.data.value) }
             }
         }
         let subCancelled = Task { () -> HASubscription in
@@ -665,6 +667,10 @@ final class HAWebSocketClientTests: XCTestCase {
         try await reconnectTask.value
         await client.disconnect()
     }
+}
+
+private struct TestEventPayload: Decodable, Equatable {
+    let value: String
 }
 
 private struct MissingTypeRequest: Encodable {
