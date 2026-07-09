@@ -1,0 +1,229 @@
+warning: Usage of /Users/jin/Library/org.swift.swiftpm/collections.json has been deprecated. Please delete it and use the new /Users/jin/Library/org.swift.swiftpm/configuration/collections.json instead.
+[1/1] Planning build
+Building for debugging...
+Build complete! (0.98s)
+Test Suite 'All tests' started at 2026-07-09 20:51:43.624
+Test Suite 'NativeHAPackageTests.xctest' started at 2026-07-09 20:51:43.625
+Test Suite 'AppScaffoldTests' started at 2026-07-09 20:51:43.625
+Test Case '-[NativeHATests.AppScaffoldTests testAppStateTracksDashboardSelectionFromRoutes]' started.
+Test Case '-[NativeHATests.AppScaffoldTests testAppStateTracksDashboardSelectionFromRoutes]' passed (0.001 seconds).
+Test Case '-[NativeHATests.AppScaffoldTests testDashboardPathsAreNormalized]' started.
+Test Case '-[NativeHATests.AppScaffoldTests testDashboardPathsAreNormalized]' passed (0.000 seconds).
+Test Case '-[NativeHATests.AppScaffoldTests testFileCredentialProviderReadsLocalDevelopmentFiles]' started.
+Test Case '-[NativeHATests.AppScaffoldTests testFileCredentialProviderReadsLocalDevelopmentFiles]' passed (0.002 seconds).
+Test Case '-[NativeHATests.AppScaffoldTests testMoreInfoPresentationUsesEntityRoute]' started.
+Test Case '-[NativeHATests.AppScaffoldTests testMoreInfoPresentationUsesEntityRoute]' passed (0.000 seconds).
+Test Suite 'AppScaffoldTests' passed at 2026-07-09 20:51:43.628.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+Test Suite 'BasicUsedCardViewTests' started at 2026-07-09 20:51:43.628
+Test Case '-[NativeHATests.BasicUsedCardViewTests testCapturedDashboardNonHistoryCardsAreNativeNotFallback]' started.
+Test Case '-[NativeHATests.BasicUsedCardViewTests testCapturedDashboardNonHistoryCardsAreNativeNotFallback]' passed (0.065 seconds).
+Test Case '-[NativeHATests.BasicUsedCardViewTests testEntitiesHeaderToggleHonorsExplicitFalseAndDefaultRule]' started.
+Test Case '-[NativeHATests.BasicUsedCardViewTests testEntitiesHeaderToggleHonorsExplicitFalseAndDefaultRule]' passed (0.001 seconds).
+Test Case '-[NativeHATests.BasicUsedCardViewTests testEntityBadgeDisplayDefaultsMatchObjectAndStringConfigs]' started.
+Test Case '-[NativeHATests.BasicUsedCardViewTests testEntityBadgeDisplayDefaultsMatchObjectAndStringConfigs]' passed (0.001 seconds).
+Test Case '-[NativeHATests.BasicUsedCardViewTests testEntityRowsMapUsedDomainsToNativeRowKinds]' started.
+Test Case '-[NativeHATests.BasicUsedCardViewTests testEntityRowsMapUsedDomainsToNativeRowKinds]' passed (0.001 seconds).
+Test Case '-[NativeHATests.BasicUsedCardViewTests testTileIconTapDefaultsUseActionResolver]' started.
+Test Case '-[NativeHATests.BasicUsedCardViewTests testTileIconTapDefaultsUseActionResolver]' passed (0.001 seconds).
+Test Suite 'BasicUsedCardViewTests' passed at 2026-07-09 20:51:43.697.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.069 (0.069) seconds
+Test Suite 'DownSamplerTests' started at 2026-07-09 20:51:43.697
+Test Case '-[NativeHATests.DownSamplerTests testDownsamplesHundredThousandPointsPerformanceStyle]' started.
+/Users/jin/Documents/HA/NativeHA/Tests/NativeHATests/DownSamplerTests.swift:168: Test Case '-[NativeHATests.DownSamplerTests testDownsamplesHundredThousandPointsPerformanceStyle]' measured [Time, seconds] average: 0.026, relative standard deviation: 14.573%, values: [0.037695, 0.027592, 0.026149, 0.025111, 0.025165, 0.024896, 0.024516, 0.024667, 0.024276, 0.024601], performanceMetricID:com.apple.XCTPerformanceMetric_WallClockTime, baselineName: "", baselineAverage: , polarity: prefers smaller, maxPercentRegression: 10.000%, maxPercentRelativeStandardDeviation: 10.000%, maxRegression: 0.100, maxStandardDeviation: 0.100
+Test Case '-[NativeHATests.DownSamplerTests testDownsamplesHundredThousandPointsPerformanceStyle]' passed (0.674 seconds).
+Test Case '-[NativeHATests.DownSamplerTests testLargeScaleDigestMatchesTypeScriptCharacterization]' started.
+Test Case '-[NativeHATests.DownSamplerTests testLargeScaleDigestMatchesTypeScriptCharacterization]' passed (0.084 seconds).
+Test Case '-[NativeHATests.DownSamplerTests testLargeScaleMeanDigestMatchesTypeScriptCharacterization]' started.
+Test Case '-[NativeHATests.DownSamplerTests testLargeScaleMeanDigestMatchesTypeScriptCharacterization]' passed (0.079 seconds).
+Test Case '-[NativeHATests.DownSamplerTests testLinePointDownsamplingPreservesNullBreaksBetweenFiniteRuns]' started.
+Test Case '-[NativeHATests.DownSamplerTests testLinePointDownsamplingPreservesNullBreaksBetweenFiniteRuns]' passed (0.000 seconds).
+Test Case '-[NativeHATests.DownSamplerTests testMeanModeAveragesEachBucket]' started.
+Test Case '-[NativeHATests.DownSamplerTests testMeanModeAveragesEachBucket]' passed (0.000 seconds).
+Test Case '-[NativeHATests.DownSamplerTests testMinMaxModeBucketsByXAxisAndPreservesChronologicalExtremes]' started.
+Test Case '-[NativeHATests.DownSamplerTests testMinMaxModeBucketsByXAxisAndPreservesChronologicalExtremes]' passed (0.000 seconds).
+Test Case '-[NativeHATests.DownSamplerTests testMinMaxModeKeepsFirstOccurrenceOnTies]' started.
+Test Case '-[NativeHATests.DownSamplerTests testMinMaxModeKeepsFirstOccurrenceOnTies]' passed (0.000 seconds).
+Test Case '-[NativeHATests.DownSamplerTests testReturnsEmptyArrayForNilData]' started.
+Test Case '-[NativeHATests.DownSamplerTests testReturnsEmptyArrayForNilData]' passed (0.000 seconds).
+Test Case '-[NativeHATests.DownSamplerTests testReturnsOriginalDataWhenBelowMaxDetails]' started.
+Test Case '-[NativeHATests.DownSamplerTests testReturnsOriginalDataWhenBelowMaxDetails]' passed (0.000 seconds).
+Test Case '-[NativeHATests.DownSamplerTests testSkipsNonFiniteCoordinatesWhenSampling]' started.
+Test Case '-[NativeHATests.DownSamplerTests testSkipsNonFiniteCoordinatesWhenSampling]' passed (0.000 seconds).
+Test Suite 'DownSamplerTests' passed at 2026-07-09 20:51:44.535.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.837 (0.838) seconds
+Test Suite 'EntityFormattingDomainLogicActionTests' started at 2026-07-09 20:51:44.535
+Test Case '-[NativeHATests.EntityFormattingDomainLogicActionTests testActionResolutionDefaultsAndToggleServiceMapping]' started.
+Test Case '-[NativeHATests.EntityFormattingDomainLogicActionTests testActionResolutionDefaultsAndToggleServiceMapping]' passed (0.052 seconds).
+Test Case '-[NativeHATests.EntityFormattingDomainLogicActionTests testActiveStateAndDeterministicStateColorsUseInventoryDomains]' started.
+Test Case '-[NativeHATests.EntityFormattingDomainLogicActionTests testActiveStateAndDeterministicStateColorsUseInventoryDomains]' passed (0.050 seconds).
+Test Case '-[NativeHATests.EntityFormattingDomainLogicActionTests testFormatsRepresentativeInventoryEntities]' started.
+Test Case '-[NativeHATests.EntityFormattingDomainLogicActionTests testFormatsRepresentativeInventoryEntities]' passed (0.054 seconds).
+Test Case '-[NativeHATests.EntityFormattingDomainLogicActionTests testVisibilityConditionsCoverStateAndNumericState]' started.
+Test Case '-[NativeHATests.EntityFormattingDomainLogicActionTests testVisibilityConditionsCoverStateAndNumericState]' passed (0.050 seconds).
+Test Suite 'EntityFormattingDomainLogicActionTests' passed at 2026-07-09 20:51:44.741.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.206 (0.206) seconds
+Test Suite 'HAConnectionTests' started at 2026-07-09 20:51:44.741
+Test Case '-[NativeHATests.HAConnectionTests testReconnectObserverCancellationIsIdempotent]' started.
+Test Case '-[NativeHATests.HAConnectionTests testReconnectObserverCancellationIsIdempotent]' passed (0.002 seconds).
+Test Case '-[NativeHATests.HAConnectionTests testReconnectObserverDoesNotHoldLockWhileInvokingCallbacks]' started.
+/Users/jin/Documents/HA/NativeHA/Tests/NativeHATests/HAConnectionTests.swift:37: error: -[NativeHATests.HAConnectionTests testReconnectObserverDoesNotHoldLockWhileInvokingCallbacks] : XCTAssertTrue failed
+Test Case '-[NativeHATests.HAConnectionTests testReconnectObserverDoesNotHoldLockWhileInvokingCallbacks]' failed (0.056 seconds).
+Test Case '-[NativeHATests.HAConnectionTests testRegistryUpdateEventsTriggerRefresh]' started.
+/Users/jin/Documents/HA/NativeHA/Tests/NativeHATests/HAConnectionTests.swift:99: error: -[NativeHATests.HAConnectionTests testRegistryUpdateEventsTriggerRefresh] : XCTAssertGreaterThan failed: ("0") is not greater than ("0")
+Test Case '-[NativeHATests.HAConnectionTests testRegistryUpdateEventsTriggerRefresh]' failed (0.055 seconds).
+Test Case '-[NativeHATests.HAConnectionTests testServiceCallMappingForSupportedDomainsDoesNotRegress]' started.
+Test Case '-[NativeHATests.HAConnectionTests testServiceCallMappingForSupportedDomainsDoesNotRegress]' passed (0.002 seconds).
+Test Case '-[NativeHATests.HAConnectionTests testStateChangedEventUpdatesStateStoreOnMainActor]' started.
+/Users/jin/Documents/HA/NativeHA/Tests/NativeHATests/HAConnectionTests.swift:73: error: -[NativeHATests.HAConnectionTests testStateChangedEventUpdatesStateStoreOnMainActor] : XCTAssertEqual failed: ("nil") is not equal to ("Optional("on")")
+Test Case '-[NativeHATests.HAConnectionTests testStateChangedEventUpdatesStateStoreOnMainActor]' failed (0.056 seconds).
+Test Suite 'HAConnectionTests' failed at 2026-07-09 20:51:44.911.
+	 Executed 5 tests, with 3 failures (0 unexpected) in 0.170 (0.170) seconds
+Test Suite 'HASnapshotDecodingTests' started at 2026-07-09 20:51:44.911
+Test Case '-[NativeHATests.HASnapshotDecodingTests testDecodesCoreRuntimeSnapshots]' started.
+Test Case '-[NativeHATests.HASnapshotDecodingTests testDecodesCoreRuntimeSnapshots]' passed (0.105 seconds).
+Test Case '-[NativeHATests.HASnapshotDecodingTests testDecodesRegistryAndFrontendSnapshots]' started.
+Test Case '-[NativeHATests.HASnapshotDecodingTests testDecodesRegistryAndFrontendSnapshots]' passed (0.041 seconds).
+Test Case '-[NativeHATests.HASnapshotDecodingTests testStoresApplySnapshotModels]' started.
+Test Case '-[NativeHATests.HASnapshotDecodingTests testStoresApplySnapshotModels]' passed (0.102 seconds).
+Test Suite 'HASnapshotDecodingTests' passed at 2026-07-09 20:51:45.160.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.249 (0.249) seconds
+Test Suite 'HAWebSocketClientTests' started at 2026-07-09 20:51:45.160
+Test Case '-[NativeHATests.HAWebSocketClientTests testActiveSubscriptionCancellationSendsUnsubscribeWithServerIDAndIsIdempotent]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testActiveSubscriptionCancellationSendsUnsubscribeWithServerIDAndIsIdempotent]' passed (0.054 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testAuthBuildsWebSocketURLFromHTTPServerURL]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testAuthBuildsWebSocketURLFromHTTPServerURL]' passed (0.000 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testCallWSRoutesOutOfOrderResultsByRequestID]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testCallWSRoutesOutOfOrderResultsByRequestID]' passed (0.023 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testCancellationBeforeSubscribeResultDoesNotLeakServerSubscription]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testCancellationBeforeSubscribeResultDoesNotLeakServerSubscription]' passed (0.024 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testCancelledLaterRequestDoesNotAdvanceSendOrderPastEarlierRequests]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testCancelledLaterRequestDoesNotAdvanceSendOrderPastEarlierRequests]' passed (0.038 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testCancelledSubscriptionIsNotReplayed]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testCancelledSubscriptionIsNotReplayed]' passed (0.025 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testEventArrivingAfterLocalCancelIsIgnored]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testEventArrivingAfterLocalCancelIsIgnored]' passed (0.078 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testExplicitDisconnectStopsRetrying]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testExplicitDisconnectStopsRetrying]' passed (0.275 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testHAConnectionReconnectObserverIsCalledAndCanBeCancelled]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testHAConnectionReconnectObserverIsCalledAndCanBeCancelled]' passed (0.001 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testMalformedEventPayloadDoesNotCrashUnrelatedSubscriptions]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testMalformedEventPayloadDoesNotCrashUnrelatedSubscriptions]' passed (0.232 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testMultipleSubscriptionsReplayAndDispatchCorrectly]' started.
+/Users/jin/Documents/HA/NativeHA/Tests/NativeHATests/HAWebSocketClientTests.swift:568: error: -[NativeHATests.HAWebSocketClientTests testMultipleSubscriptionsReplayAndDispatchCorrectly] : XCTAssertEqual failed: ("[]") is not equal to ("["val_a"]")
+/Users/jin/Documents/HA/NativeHA/Tests/NativeHATests/HAWebSocketClientTests.swift:569: error: -[NativeHATests.HAWebSocketClientTests testMultipleSubscriptionsReplayAndDispatchCorrectly] : XCTAssertEqual failed: ("[]") is not equal to ("["val_b"]")
+Test Case '-[NativeHATests.HAWebSocketClientTests testMultipleSubscriptionsReplayAndDispatchCorrectly]' failed (0.255 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testOneCancelledOneActiveOnlyActiveReplays]' started.
+/Users/jin/Documents/HA/NativeHA/Tests/NativeHATests/HAWebSocketClientTests.swift:658: error: -[NativeHATests.HAWebSocketClientTests testOneCancelledOneActiveOnlyActiveReplays] : XCTAssertEqual failed: ("[]") is not equal to ("["live"]")
+Test Case '-[NativeHATests.HAWebSocketClientTests testOneCancelledOneActiveOnlyActiveReplays]' failed (0.258 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testOutboundEncodingFailureDoesNotWedgeLaterRequestOrdering]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testOutboundEncodingFailureDoesNotWedgeLaterRequestOrdering]' passed (0.012 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testReceiveLoopFailureRetriesReconnectUntilSuccessful]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testReceiveLoopFailureRetriesReconnectUntilSuccessful]' passed (0.101 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testReconnectReplaysActiveSubscriptionWithFreshServerIDOnce]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testReconnectReplaysActiveSubscriptionWithFreshServerIDOnce]' passed (0.038 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testSubscribeRoutesEventsToMatchingCallback]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testSubscribeRoutesEventsToMatchingCallback]' passed (0.012 seconds).
+Test Case '-[NativeHATests.HAWebSocketClientTests testUnsubscribeFailureDoesNotFailClient]' started.
+Test Case '-[NativeHATests.HAWebSocketClientTests testUnsubscribeFailureDoesNotFailClient]' passed (0.080 seconds).
+Test Suite 'HAWebSocketClientTests' failed at 2026-07-09 20:51:46.667.
+	 Executed 17 tests, with 3 failures (0 unexpected) in 1.507 (1.507) seconds
+Test Suite 'HistoryProcessorTests' started at 2026-07-09 20:51:46.667
+Test Case '-[NativeHATests.HistoryProcessorTests testComputeHistoryClassifiesGroupsAndDeduplicatesLineAndTimelineData]' started.
+Test Case '-[NativeHATests.HistoryProcessorTests testComputeHistoryClassifiesGroupsAndDeduplicatesLineAndTimelineData]' passed (0.001 seconds).
+Test Case '-[NativeHATests.HistoryProcessorTests testComputeHistoryFallsBackToCurrentStateForMissingHistory]' started.
+Test Case '-[NativeHATests.HistoryProcessorTests testComputeHistoryFallsBackToCurrentStateForMissingHistory]' passed (0.000 seconds).
+Test Case '-[NativeHATests.HistoryProcessorTests testComputeHistoryLargeGeneratedPayloadPerformanceStyle]' started.
+/Users/jin/Documents/HA/NativeHA/Tests/NativeHATests/HistoryProcessorTests.swift:224: Test Case '-[NativeHATests.HistoryProcessorTests testComputeHistoryLargeGeneratedPayloadPerformanceStyle]' measured [Time, seconds] average: 0.001, relative standard deviation: 11.855%, values: [0.000987, 0.000683, 0.000674, 0.000723, 0.000871, 0.000874, 0.000882, 0.000820, 0.000766, 0.000760], performanceMetricID:com.apple.XCTPerformanceMetric_WallClockTime, baselineName: "", baselineAverage: , polarity: prefers smaller, maxPercentRegression: 10.000%, maxPercentRelativeStandardDeviation: 10.000%, maxRegression: 0.100, maxStandardDeviation: 0.100
+Test Case '-[NativeHATests.HistoryProcessorTests testComputeHistoryLargeGeneratedPayloadPerformanceStyle]' passed (0.264 seconds).
+Test Case '-[NativeHATests.HistoryProcessorTests testHistoryAndStatisticsAPIBuildExpectedWebSocketPayloads]' started.
+Test Case '-[NativeHATests.HistoryProcessorTests testHistoryAndStatisticsAPIBuildExpectedWebSocketPayloads]' passed (0.002 seconds).
+Test Case '-[NativeHATests.HistoryProcessorTests testSpecialDomainLineHistoryKeepsOnlyChartRelevantAttributes]' started.
+Test Case '-[NativeHATests.HistoryProcessorTests testSpecialDomainLineHistoryKeepsOnlyChartRelevantAttributes]' passed (0.000 seconds).
+Test Case '-[NativeHATests.HistoryProcessorTests testStatisticsConvertToHistoryAndMergeDropsOverlappingStatistics]' started.
+Test Case '-[NativeHATests.HistoryProcessorTests testStatisticsConvertToHistoryAndMergeDropsOverlappingStatistics]' passed (0.001 seconds).
+Test Suite 'HistoryProcessorTests' passed at 2026-07-09 20:51:46.935.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.268 (0.268) seconds
+Test Suite 'HistoryStreamTests' started at 2026-07-09 20:51:46.935
+Test Case '-[NativeHATests.HistoryStreamTests testBoundaryStateDeletesLastChangedWhenPruningExpiredHistory]' started.
+Test Case '-[NativeHATests.HistoryStreamTests testBoundaryStateDeletesLastChangedWhenPruningExpiredHistory]' passed (0.000 seconds).
+Test Case '-[NativeHATests.HistoryStreamTests testProcessMessageInitializesKeepsEmptyMessagesAndMergesIncrementalUpdates]' started.
+Test Case '-[NativeHATests.HistoryStreamTests testProcessMessageInitializesKeepsEmptyMessagesAndMergesIncrementalUpdates]' passed (0.000 seconds).
+Test Case '-[NativeHATests.HistoryStreamTests testPruneDoesNotRewriteStatesWhenNothingIsExpired]' started.
+Test Case '-[NativeHATests.HistoryStreamTests testPruneDoesNotRewriteStatesWhenNothingIsExpired]' passed (0.000 seconds).
+Test Case '-[NativeHATests.HistoryStreamTests testTimeWindowSubscriptionRebuildsWindowAndStreamOnReplay]' started.
+Test Case '-[NativeHATests.HistoryStreamTests testTimeWindowSubscriptionRebuildsWindowAndStreamOnReplay]' passed (0.002 seconds).
+Test Suite 'HistoryStreamTests' passed at 2026-07-09 20:51:46.938.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.003 (0.003) seconds
+Test Suite 'LineSeriesBuilderTests' started at 2026-07-09 20:51:46.938
+Test Case '-[NativeHATests.LineSeriesBuilderTests testAppendsCurrentStateForRecentSingleSensorCharts]' started.
+Test Case '-[NativeHATests.LineSeriesBuilderTests testAppendsCurrentStateForRecentSingleSensorCharts]' passed (0.000 seconds).
+Test Case '-[NativeHATests.LineSeriesBuilderTests testBuildsBasicClimateAttributeSeries]' started.
+Test Case '-[NativeHATests.LineSeriesBuilderTests testBuildsBasicClimateAttributeSeries]' passed (0.000 seconds).
+Test Case '-[NativeHATests.LineSeriesBuilderTests testBuildsNullBreaksForUnknownUnavailableAndNonNumericGaps]' started.
+Test Case '-[NativeHATests.LineSeriesBuilderTests testBuildsNullBreaksForUnknownUnavailableAndNonNumericGaps]' passed (0.000 seconds).
+Test Case '-[NativeHATests.LineSeriesBuilderTests testBuildsNumericSensorSeriesWithStepMetadataAndYAxis]' started.
+Test Case '-[NativeHATests.LineSeriesBuilderTests testBuildsNumericSensorSeriesWithStepMetadataAndYAxis]' passed (0.000 seconds).
+Test Case '-[NativeHATests.LineSeriesBuilderTests testBuildsStatisticsSourceBoundaryMetadata]' started.
+Test Case '-[NativeHATests.LineSeriesBuilderTests testBuildsStatisticsSourceBoundaryMetadata]' passed (0.000 seconds).
+Test Case '-[NativeHATests.LineSeriesBuilderTests testBuildsTimelineRowsWithDeterministicColors]' started.
+Test Case '-[NativeHATests.LineSeriesBuilderTests testBuildsTimelineRowsWithDeterministicColors]' passed (0.000 seconds).
+Test Suite 'LineSeriesBuilderTests' passed at 2026-07-09 20:51:46.940.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'LovelaceLayoutAndFactoryTests' started at 2026-07-09 20:51:46.940
+Test Case '-[NativeHATests.LovelaceLayoutAndFactoryTests testCapturedDashboardCardsCanProduceRenderDescriptors]' started.
+Test Case '-[NativeHATests.LovelaceLayoutAndFactoryTests testCapturedDashboardCardsCanProduceRenderDescriptors]' passed (0.071 seconds).
+Test Case '-[NativeHATests.LovelaceLayoutAndFactoryTests testFactoryClassifiesNativeAndFallbackCards]' started.
+Test Case '-[NativeHATests.LovelaceLayoutAndFactoryTests testFactoryClassifiesNativeAndFallbackCards]' passed (0.001 seconds).
+Test Case '-[NativeHATests.LovelaceLayoutAndFactoryTests testGridSizingMigratesLayoutOptionsAndClampsGridOptions]' started.
+Test Case '-[NativeHATests.LovelaceLayoutAndFactoryTests testGridSizingMigratesLayoutOptionsAndClampsGridOptions]' passed (0.001 seconds).
+Test Case '-[NativeHATests.LovelaceLayoutAndFactoryTests testMasonrySizingUsesHomeAssistantLikeBreakpointsAndPlacement]' started.
+Test Case '-[NativeHATests.LovelaceLayoutAndFactoryTests testMasonrySizingUsesHomeAssistantLikeBreakpointsAndPlacement]' passed (0.000 seconds).
+Test Case '-[NativeHATests.LovelaceLayoutAndFactoryTests testVisibilityFiltersCardsWithoutMutatingConfigState]' started.
+Test Case '-[NativeHATests.LovelaceLayoutAndFactoryTests testVisibilityFiltersCardsWithoutMutatingConfigState]' passed (0.001 seconds).
+Test Suite 'LovelaceLayoutAndFactoryTests' passed at 2026-07-09 20:51:47.015.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.074 (0.075) seconds
+Test Suite 'LovelaceModelAndAPITests' started at 2026-07-09 20:51:47.015
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testDecodesLovelaceDashboardListSnapshot]' started.
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testDecodesLovelaceDashboardListSnapshot]' passed (0.000 seconds).
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testDecodesOverviewDashboardCardsBadgesAndKeyFields]' started.
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testDecodesOverviewDashboardCardsBadgesAndKeyFields]' passed (0.041 seconds).
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testDecodesSectionsDashboardsAndTileFields]' started.
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testDecodesSectionsDashboardsAndTileFields]' passed (0.021 seconds).
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testDecodesStrategyResourcesAndInfoSnapshots]' started.
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testDecodesStrategyResourcesAndInfoSnapshots]' passed (0.001 seconds).
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testLovelaceAPISendsExpectedWebSocketRequests]' started.
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testLovelaceAPISendsExpectedWebSocketRequests]' passed (0.001 seconds).
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testProviderAdaptsTypedAPIToExistingAppProtocol]' started.
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testProviderAdaptsTypedAPIToExistingAppProtocol]' passed (0.028 seconds).
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testUnknownCardsAndKnownCardExtraKeysPreserveRawJSON]' started.
+Test Case '-[NativeHATests.LovelaceModelAndAPITests testUnknownCardsAndKnownCardExtraKeysPreserveRawJSON]' passed (0.002 seconds).
+Test Suite 'LovelaceModelAndAPITests' passed at 2026-07-09 20:51:47.109.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.094 (0.094) seconds
+Test Suite 'LovelaceStoreRouterTests' started at 2026-07-09 20:51:47.109
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testMapStrategyDashboardBecomesPlaceholder]' started.
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testMapStrategyDashboardBecomesPlaceholder]' passed (0.001 seconds).
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testRoutingDoesNotSelectRestrictedViewWithoutMatchingUser]' started.
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testRoutingDoesNotSelectRestrictedViewWithoutMatchingUser]' passed (0.000 seconds).
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testStoreLoadsExpectedDashboardConfigsThroughMockProvider]' started.
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testStoreLoadsExpectedDashboardConfigsThroughMockProvider]' passed (0.038 seconds).
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testStorePassesCurrentUserToRouting]' started.
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testStorePassesCurrentUserToRouting]' passed (0.001 seconds).
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testStoreRefetchesOnMatchingLovelaceUpdateEvent]' started.
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testStoreRefetchesOnMatchingLovelaceUpdateEvent]' passed (0.108 seconds).
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testStoreSelectsOverviewViewsByPath]' started.
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testStoreSelectsOverviewViewsByPath]' passed (0.075 seconds).
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testViewVisibilityHandlesBooleansAndUserRestrictions]' started.
+Test Case '-[NativeHATests.LovelaceStoreRouterTests testViewVisibilityHandlesBooleansAndUserRestrictions]' passed (0.000 seconds).
+Test Suite 'LovelaceStoreRouterTests' passed at 2026-07-09 20:51:47.333.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.223 (0.224) seconds
+Test Suite 'MarkdownTemplateSubscriptionTests' started at 2026-07-09 20:51:47.333
+Test Case '-[NativeHATests.MarkdownTemplateSubscriptionTests testSubscribeRenderTemplateBuildsPayloadAndRoutesMockEvents]' started.
+Test Case '-[NativeHATests.MarkdownTemplateSubscriptionTests testSubscribeRenderTemplateBuildsPayloadAndRoutesMockEvents]' passed (0.001 seconds).
+Test Suite 'MarkdownTemplateSubscriptionTests' passed at 2026-07-09 20:51:47.333.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'NativeHAPackageTests.xctest' failed at 2026-07-09 20:51:47.333.
+	 Executed 84 tests, with 6 failures (0 unexpected) in 3.706 (3.708) seconds
+Test Suite 'All tests' failed at 2026-07-09 20:51:47.333.
+	 Executed 84 tests, with 6 failures (0 unexpected) in 3.706 (3.709) seconds
+DECODE ERROR call_service: keyNotFound(CodingKeys(stringValue: "context", intValue: nil), Swift.DecodingError.Context(codingPath: [], debugDescription: "No value associated with key CodingKeys(stringValue: \"context\", intValue: nil) (\"context\").", underlyingError: nil))
