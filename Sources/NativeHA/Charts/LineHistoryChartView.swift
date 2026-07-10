@@ -618,6 +618,9 @@ struct LineHistoryChartView: View {
     private func draw(_ chart: PreparedLineChart, in context: inout GraphicsContext) {
         drawAxes(chart, in: &context)
 
+        var plotContext = context
+        plotContext.clip(to: Path(chart.geometry.plotRect))
+
         for item in chart.series {
             let color = theme.color(hex: item.colorHex)
             for segment in item.segments {
@@ -638,10 +641,10 @@ struct LineHistoryChartView: View {
                     ))
                     fillPath.addLine(to: CGPoint(x: first.position.x, y: chart.geometry.plotRect.maxY))
                     fillPath.closeSubpath()
-                    context.fill(fillPath, with: .color(color.opacity(0.16 * segment.alpha)))
+                    plotContext.fill(fillPath, with: .color(color.opacity(0.16 * segment.alpha)))
                 }
 
-                context.stroke(
+                plotContext.stroke(
                     path,
                     with: .color(color.opacity(segment.alpha)),
                     lineWidth: theme.lineWidth
@@ -655,7 +658,7 @@ struct LineHistoryChartView: View {
                     width: theme.pointRadius * 2,
                     height: theme.pointRadius * 2
                 )
-                context.fill(Path(ellipseIn: rect), with: .color(color))
+                plotContext.fill(Path(ellipseIn: rect), with: .color(color))
             }
         }
     }
