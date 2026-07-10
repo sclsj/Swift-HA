@@ -228,18 +228,24 @@ final class HistoryGraphCardViewModel: ObservableObject {
 
             let statisticsHistory: HistoryResult?
             if let statisticsWindow = model.statisticsWindow(endingAt: endTime) {
-                let statistics = try await provider.fetchStatistics(
-                    startTime: statisticsWindow.start,
-                    endTime: statisticsWindow.end,
-                    statisticIDs: model.entityIDs
-                )
-                try Task.checkCancellation()
-                statisticsHistory = HistoryProcessor.convertStatisticsToHistory(
-                    statistics: statistics,
-                    statisticIDs: model.entityIDs,
-                    context: processingContext,
-                    splitDeviceClasses: model.splitDeviceClasses
-                )
+                do {
+                    let statistics = try await provider.fetchStatistics(
+                        startTime: statisticsWindow.start,
+                        endTime: statisticsWindow.end,
+                        statisticIDs: model.entityIDs
+                    )
+                    try Task.checkCancellation()
+                    statisticsHistory = HistoryProcessor.convertStatisticsToHistory(
+                        statistics: statistics,
+                        statisticIDs: model.entityIDs,
+                        context: processingContext,
+                        splitDeviceClasses: model.splitDeviceClasses
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    statisticsHistory = nil
+                }
             } else {
                 statisticsHistory = nil
             }

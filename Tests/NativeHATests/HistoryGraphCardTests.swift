@@ -83,6 +83,34 @@ final class HistoryGraphCardTests: XCTestCase {
         XCTAssertEqual(config.entities.first?.raw.objectValue?["unsupported"], .string("safe"))
     }
 
+    func testMalformedHistoryGraphEntityConfigDecodesSafely() throws {
+        let nonArrayConfig = try decodeHistoryConfig("""
+        {
+          "type": "history-graph",
+          "entities": {"entity": "sensor.power"}
+        }
+        """)
+        XCTAssertTrue(HistoryGraphCardModel(config: nonArrayConfig, displayContext: .empty).entityIDs.isEmpty)
+        XCTAssertEqual(nonArrayConfig.raw.objectValue?["entities"]?.objectValue?["entity"], .string("sensor.power"))
+
+        let mixedConfig = try decodeHistoryConfig("""
+        {
+          "type": "history-graph",
+          "entities": [
+            "sensor.power",
+            42,
+            {"entity": null},
+            {"entity": "missing_dot"},
+            {"entity": "sensor.temperature"}
+          ]
+        }
+        """)
+
+        let mixedModel = HistoryGraphCardModel(config: mixedConfig, displayContext: .empty)
+        XCTAssertEqual(mixedModel.entityIDs, ["sensor.power", "sensor.temperature"])
+        XCTAssertEqual(mixedConfig.entities.count, 5)
+    }
+
     func testMissingEntitiesShowsSafeEmptyState() throws {
         let config = try decodeHistoryConfig("""
         {
@@ -258,6 +286,36 @@ final class HistoryGraphCardTests: XCTestCase {
             return XCTFail("Expected error state.")
         }
         XCTAssertTrue(message.contains("fetchFailed"))
+    }
+
+    func testStatisticsFetchErrorFallsBackToHistoryData() async throws {
+        let provider = MockHistoryGraphDataProvider()
+        provider.historyResult = [
+            "sensor.power": [
+                historyState("10", attributes: ["unit_of_measurement": .string("W")], lu: 19_800),
+                historyState("12", lu: 19_900)
+            ]
+        ]
+        provider.statisticsError = TestHistoryError.fetchFailed
+        let context = numericContext(entityID: "sensor.power")
+        let viewModel = HistoryGraphCardViewModel(now: { self.fixedNow })
+        let model = HistoryGraphCardModel(
+            config: try decodeHistoryConfig("""
+            {
+              "type": "history-graph",
+              "hours_to_show": 3,
+              "entities": ["sensor.power"]
+            }
+            """),
+            displayContext: context
+        )
+
+        await viewModel.load(model: model, provider: provider, displayContext: context)
+
+        let chartData = try loadedChartData(from: viewModel.phase)
+        XCTAssertEqual(provider.statisticsRequests.count, 1)
+        XCTAssertEqual(chartData.lineCharts.count, 1)
+        XCTAssertEqual(chartData.lineCharts.first?.series.series.first?.entityID, "sensor.power")
     }
 
     func testEmptyHistoryProducesEmptyState() async throws {
@@ -525,6 +583,7 @@ private final class MockHistoryGraphDataProvider: HistoryGraphDataProviding {
     var historyResult: HistoryStates = [:]
     var statisticsResult: Statistics = [:]
     var historyError: Error?
+    var statisticsError: Error?
     var suspendHistoryFetch = false
 
     private(set) var historyRequests: [HistoryRequest] = []
@@ -571,6 +630,9 @@ private final class MockHistoryGraphDataProvider: HistoryGraphDataProviding {
             endTime: endTime,
             statisticIDs: statisticIDs
         ))
+        if let statisticsError = statisticsError {
+            throw statisticsError
+        }
         return statisticsResult
     }
 

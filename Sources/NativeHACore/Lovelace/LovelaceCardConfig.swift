@@ -254,14 +254,20 @@ public enum LovelaceGraphEntityConfig: Decodable, Equatable {
         }
     }
 
+    public init(raw: HAJSONValue) {
+        switch raw {
+        case let .string(entity):
+            self = .entity(entity)
+        case .object:
+            self = .config(LovelaceGraphEntityObjectConfig(raw: raw))
+        default:
+            self = .config(LovelaceGraphEntityObjectConfig(entity: "", raw: raw))
+        }
+    }
+
     public init(from decoder: Decoder) throws {
         let raw = try HAJSONValue(from: decoder)
-        if case let .string(entity) = raw {
-            self = .entity(entity)
-            return
-        }
-
-        self = .config(try LovelaceGraphEntityObjectConfig(from: decoder))
+        self.init(raw: raw)
     }
 }
 
@@ -271,18 +277,37 @@ public struct LovelaceGraphEntityObjectConfig: Decodable, Equatable {
     public var color: String?
     public var raw: HAJSONValue
 
+    public init(
+        entity: EntityID,
+        name: String? = nil,
+        color: String? = nil,
+        raw: HAJSONValue = .object([:])
+    ) {
+        self.entity = entity
+        self.name = name
+        self.color = color
+        self.raw = raw
+    }
+
     enum CodingKeys: String, CodingKey {
         case entity
         case name
         case color
     }
 
+    public init(raw: HAJSONValue) {
+        let object = raw.objectValue ?? [:]
+        self.init(
+            entity: object["entity"]?.stringValue ?? "",
+            name: object["name"]?.stringValue,
+            color: object["color"]?.stringValue,
+            raw: raw
+        )
+    }
+
     public init(from decoder: Decoder) throws {
-        raw = try HAJSONValue(from: decoder)
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        entity = try container.decodeLovelaceStringIfPresent(forKey: .entity) ?? ""
-        name = try container.decodeLovelaceStringIfPresent(forKey: .name)
-        color = try container.decodeLovelaceStringIfPresent(forKey: .color)
+        let raw = try HAJSONValue(from: decoder)
+        self.init(raw: raw)
     }
 }
 
@@ -363,7 +388,7 @@ public struct HistoryGraphCardConfig: LovelaceCardConfigProtocol {
         metadata = try LovelaceCardMetadata(from: decoder)
         let container = try decoder.container(keyedBy: CodingKeys.self)
         type = try container.decodeLovelaceStringIfPresent(forKey: .type) ?? "history-graph"
-        entities = try container.decodeIfPresent([LovelaceGraphEntityConfig].self, forKey: .entities) ?? []
+        entities = try Self.decodeEntities(from: container)
         hoursToShow = try container.decodeLovelaceDoubleIfPresent(forKey: .hoursToShow)
         title = try container.decodeLovelaceStringIfPresent(forKey: .title)
         showNames = try container.decodeLovelaceBoolIfPresent(forKey: .showNames)
@@ -374,6 +399,16 @@ public struct HistoryGraphCardConfig: LovelaceCardConfigProtocol {
         splitDeviceClasses = try container.decodeLovelaceBoolIfPresent(forKey: .splitDeviceClasses)
         expandLegend = try container.decodeLovelaceBoolIfPresent(forKey: .expandLegend)
         refreshInterval = try container.decodeLovelaceDoubleIfPresent(forKey: .refreshInterval)
+    }
+
+    private static func decodeEntities(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> [LovelaceGraphEntityConfig] {
+        guard let rawEntities = try container.decodeLovelaceJSONIfPresent(forKey: .entities),
+              case let .array(values) = rawEntities else {
+            return []
+        }
+        return values.map { LovelaceGraphEntityConfig(raw: $0) }
     }
 }
 
