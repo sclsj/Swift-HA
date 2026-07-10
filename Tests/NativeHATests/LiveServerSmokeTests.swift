@@ -34,6 +34,24 @@ final class LiveServerSmokeTests: XCTestCase {
         
         XCTAssertGreaterThan(states.count, 0, "Should have loaded some states from live server")
         XCTAssertGreaterThan(entities.count, 0, "Should have loaded some registered entities")
+
+        let climateStates = states.values.filter {
+            EntityIDParser.domain(from: $0.entityID) == "climate"
+        }
+        print("Climate entities available: \(climateStates.count)")
+        if let climateState = climateStates.first {
+            let start = Date()
+            let model = MoreInfoModel.build(
+                entityID: climateState.entityID,
+                states: states,
+                registryEntries: entities,
+                config: await MainActor.run { connection.stateStore.config }
+            )
+            let elapsedMilliseconds = Date().timeIntervalSince(start) * 1_000
+            XCTAssertEqual(model.domain, "climate")
+            XCTAssertNotNil(model.climate)
+            print(String(format: "Built climate more-info model in %.2f ms", elapsedMilliseconds))
+        }
         
         // Wait 3 seconds to let some events flow in
         print("Waiting for events...")

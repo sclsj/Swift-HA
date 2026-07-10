@@ -68,8 +68,20 @@ private struct RootShellView: View {
         }
         .frame(minWidth: 720, minHeight: 480)
         .sheet(item: moreInfoBinding) { route in
-            RoutePlaceholderView(title: route.title)
-                .frame(minWidth: 320, minHeight: 220)
+            if let entityID = route.entityIDForMoreInfo {
+                MoreInfoSheet(
+                    entityID: entityID,
+                    stateStore: (environment.client as? HAConnection)?.stateStore,
+                    registryStore: (environment.client as? HAConnection)?.registryStore,
+                    onDismiss: {
+                        appState.dismissMoreInfo()
+                    },
+                    onServiceCall: executeMoreInfoServiceCall
+                )
+            } else {
+                RoutePlaceholderView(title: route.title)
+                    .frame(minWidth: 320, minHeight: 220)
+            }
         }
         .onAppear {
             environment.logger.info("NativeHA app shell appeared")
@@ -171,6 +183,26 @@ private struct RootShellView: View {
         }
     }
 
+    private func executeMoreInfoServiceCall(_ call: HAServiceCall) async throws {
+        guard let serviceClient = (environment.client as? HAConnection)?.serviceClient else {
+            throw MoreInfoServiceCallError.serviceClientUnavailable
+        }
+
+        do {
+            _ = try await serviceClient.callService(call)
+        } catch {
+            environment.logger.warning(
+                "Failed to execute more-info service call",
+                metadata: [
+                    "domain": call.domain,
+                    "service": call.service,
+                    "error": String(describing: error)
+                ]
+            )
+            throw error
+        }
+    }
+
     private func storeSummaryMetadata(_ summary: HomeAssistantStores?) -> [String: String] {
         guard let summary = summary else {
             return [:]
@@ -186,6 +218,10 @@ private struct RootShellView: View {
             "panels": String(summary.panelsCount)
         ]
     }
+}
+
+private enum MoreInfoServiceCallError: Error {
+    case serviceClientUnavailable
 }
 
 private struct RoutePlaceholderView: View {

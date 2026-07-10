@@ -112,6 +112,15 @@ struct TileCardView: View {
     }
 
     private func stateDisplay(for stateObj: HassEntity) -> String {
+        if config.stateContent == nil,
+           let climate = ClimateControlModel(
+               stateObj: stateObj,
+               registryEntry: displayContext.registryEntries[stateObj.entityID],
+               config: displayContext.config
+           ) {
+            return climate.tileStateSummary
+        }
+
         let content = config.stateContent ?? HAEntityFormatting.defaultStateContent(for: stateObj)
         let values = content.compactMap {
             displayContext.stateContentDisplay($0, for: stateObj)
