@@ -3,6 +3,7 @@ import SwiftUI
 
 enum LovelaceCardRenderKind: Equatable {
     case nativePlaceholder
+    case historyGraph
     case verticalStack
     case fallback
     case error
@@ -51,6 +52,8 @@ struct LovelaceElementFactory {
         let renderKind: LovelaceCardRenderKind
         if type.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             renderKind = .error
+        } else if case .historyGraph = card {
+            renderKind = .historyGraph
         } else if case .verticalStack = card {
             renderKind = .verticalStack
         } else if nativeCardTypes.contains(type) {
@@ -196,11 +199,10 @@ struct LovelaceElementFactory {
                 onMoreInfo: onMoreInfo,
                 onServiceCall: onServiceCall
             )
-        case .historyGraph:
-            NativePlaceholderCardView(
-                card: card,
-                descriptor: Self.descriptor(for: card),
-                states: displayContext.states
+        case let .historyGraph(config):
+            HistoryGraphCardView(
+                config: config,
+                displayContext: displayContext
             )
         case let .weatherForecast(config):
             WeatherForecastCardView(
@@ -245,6 +247,8 @@ struct LovelaceElementFactory {
             let descriptor = Self.descriptor(for: card)
             switch descriptor.renderKind {
             case .nativePlaceholder:
+                NativePlaceholderCardView(card: card, descriptor: descriptor, states: displayContext.states)
+            case .historyGraph:
                 NativePlaceholderCardView(card: card, descriptor: descriptor, states: displayContext.states)
             case .fallback:
                 CardFallbackView(descriptor: descriptor)
