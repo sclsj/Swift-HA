@@ -1,5 +1,8 @@
 import NativeHACore
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 private struct NativeHAEnvironmentKey: EnvironmentKey {
     static let defaultValue = AppEnvironment.development()
@@ -18,6 +21,9 @@ struct NativeHAApp: App {
     private let environment: AppEnvironment
 
     init() {
+#if os(macOS)
+        NSApplication.shared.setActivationPolicy(.regular)
+#endif
         let environment = AppEnvironment.development()
         self.environment = environment
         _appState = StateObject(wrappedValue: AppState(environment: environment))
