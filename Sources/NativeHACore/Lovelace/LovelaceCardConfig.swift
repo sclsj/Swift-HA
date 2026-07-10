@@ -66,22 +66,26 @@ public enum LovelaceCardConfig: Decodable, Equatable {
         }
 
         let type = object["type"]?.stringValue ?? ""
-        switch type {
-        case "entities":
-            self = .entities(try EntitiesCardConfig(from: decoder))
-        case "history-graph":
-            self = .historyGraph(try HistoryGraphCardConfig(from: decoder))
-        case "weather-forecast":
-            self = .weatherForecast(try WeatherForecastCardConfig(from: decoder))
-        case "markdown":
-            self = .markdown(try MarkdownCardConfig(from: decoder))
-        case "vertical-stack":
-            self = .verticalStack(try VerticalStackCardConfig(from: decoder))
-        case "heading":
-            self = .heading(try HeadingCardConfig(from: decoder))
-        case "tile":
-            self = .tile(try TileCardConfig(from: decoder))
-        default:
+        do {
+            switch type {
+            case "entities":
+                self = .entities(try EntitiesCardConfig(from: decoder))
+            case "history-graph":
+                self = .historyGraph(try HistoryGraphCardConfig(from: decoder))
+            case "weather-forecast":
+                self = .weatherForecast(try WeatherForecastCardConfig(from: decoder))
+            case "markdown":
+                self = .markdown(try MarkdownCardConfig(from: decoder))
+            case "vertical-stack":
+                self = .verticalStack(try VerticalStackCardConfig(from: decoder))
+            case "heading":
+                self = .heading(try HeadingCardConfig(from: decoder))
+            case "tile":
+                self = .tile(try TileCardConfig(from: decoder))
+            default:
+                self = .unknown(UnknownCardConfig(type: type, raw: raw))
+            }
+        } catch {
             self = .unknown(UnknownCardConfig(type: type, raw: raw))
         }
     }
