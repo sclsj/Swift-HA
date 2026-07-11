@@ -90,13 +90,62 @@ struct TileCardView: View {
         .clipShape(Circle())
     }
 
+    private func resolveTileColor(for stateObj: HassEntity) -> (color: Color, isInactive: Bool)? {
+        let domain = EntityIDParser.domain(from: stateObj.entityID)
+        let stateColor = HAStateColorResolver.color(for: stateObj)
+        let isInactive = stateColor == HAStateColorResolver.inactive || stateColor == HAStateColorResolver.unavailable
+        
+        if domain == "light", !isInactive,
+           let rgbArray = stateObj.attributes["rgb_color"]?.arrayValue,
+           rgbArray.count == 3,
+           let r = rgbArray[0].asDouble,
+           let g = rgbArray[1].asDouble,
+           let b = rgbArray[2].asDouble {
+            
+            let rNorm = r / 255.0
+            let gNorm = g / 255.0
+            let bNorm = b / 255.0
+            let maxC = max(rNorm, max(gNorm, bNorm))
+            let minC = min(rNorm, min(gNorm, bNorm))
+            let delta = maxC - minC
+            
+            var h = 0.0
+            if delta != 0 {
+                if maxC == rNorm {
+                    h = 60.0 * ((gNorm - bNorm) / delta).truncatingRemainder(dividingBy: 6.0)
+                } else if maxC == gNorm {
+                    h = 60.0 * (((bNorm - rNorm) / delta) + 2.0)
+                } else {
+                    h = 60.0 * (((rNorm - gNorm) / delta) + 4.0)
+                }
+                if h < 0 { h += 360.0 }
+            }
+            
+            var s = maxC == 0 ? 0 : delta / maxC
+            var v = maxC
+            
+            if s < 0.4 {
+                if s < 0.1 {
+                    v = 225.0 / 255.0
+                } else {
+                    s = 0.4
+                }
+            }
+            
+            return (Color(hue: h / 360.0, saturation: s, brightness: v), false)
+        }
+        
+        guard let stateColor = stateColor, let baseColor = Color(haHex: stateColor.hex) else {
+            return nil
+        }
+        
+        return (baseColor, isInactive)
+    }
+
     private func iconBackground(for stateObj: HassEntity) -> Color {
-        if let stateColor = HAStateColorResolver.color(for: stateObj),
-           let color = Color(haHex: stateColor.hex) {
-            let isInactive = stateColor == HAStateColorResolver.inactive
-                || stateColor == HAStateColorResolver.unavailable
-            return color.opacity(
-                isInactive
+        if let tileColor = resolveTileColor(for: stateObj) {
+            return tileColor.color.opacity(
+                tileColor.isInactive
                     ? HAStyleTokens.inactiveControlFillOpacity
                     : HAStyleTokens.activeControlFillOpacity
             )
@@ -105,10 +154,7 @@ struct TileCardView: View {
     }
 
     private func iconColor(for stateObj: HassEntity) -> Color? {
-        guard let stateColor = HAStateColorResolver.color(for: stateObj) else {
-            return nil
-        }
-        return Color(haHex: stateColor.hex)
+        resolveTileColor(for: stateObj)?.color
     }
 
     private func stateDisplay(for stateObj: HassEntity) -> String {
@@ -178,6 +224,16 @@ struct TileCardView: View {
             return true
         case .none, .unsupported:
             return false
+        }
+    }
+}
+
+private extension HAJSONValue {
+    var asDouble: Double? {
+        switch self {
+        case let .double(d): return d
+        case let .integer(i): return Double(i)
+        default: return nil
         }
     }
 }
