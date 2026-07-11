@@ -32,11 +32,13 @@ public struct LovelaceDashboardReference: Equatable {
     public var path: String
     public var title: String
     public var showInSidebar: Bool
+    public var requireAdmin: Bool
 
-    public init(path: String, title: String, showInSidebar: Bool = true) {
+    public init(path: String, title: String, showInSidebar: Bool = true, requireAdmin: Bool = false) {
         self.path = AppRoute.dashboardPath(path)
         self.title = title
         self.showInSidebar = showInSidebar
+        self.requireAdmin = requireAdmin
     }
 }
 

@@ -26,17 +26,24 @@ struct LovelaceRootView: View {
 
             Divider()
 
-            LovelaceViewHost(
-                state: store.state,
-                displayContext: displayContext,
-                templateSubscriber: templateSubscriber,
-                userName: userName,
-                userID: userID,
-                onSelectView: onSelectView,
-                onRetry: onRetry,
-                onMoreInfo: onMoreInfo,
-                onServiceCall: onServiceCall
-            )
+            if let dashboard = store.dashboards.first(where: { AppRoute.dashboardPath($0.path) == AppRoute.dashboardPath(selectedDashboardPath) }),
+               dashboard.requireAdmin,
+               displayContext.currentUser?.isAdmin != true {
+                CardWarningView(title: "Unauthorized", detail: "This dashboard requires administrator privileges.")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                LovelaceViewHost(
+                    state: store.state,
+                    displayContext: displayContext,
+                    templateSubscriber: templateSubscriber,
+                    userName: userName,
+                    userID: userID,
+                    onSelectView: onSelectView,
+                    onRetry: onRetry,
+                    onMoreInfo: onMoreInfo,
+                    onServiceCall: onServiceCall
+                )
+            }
         }
         .task(id: userID ?? "") {
             store.setCurrentUserID(userID)
@@ -86,7 +93,7 @@ struct LovelaceRootView: View {
                     if store.dashboards.isEmpty {
                         dashboardButton(LovelaceDashboardReference(path: selectedDashboardPath, title: selectedDashboardPath))
                     } else {
-                        ForEach(store.dashboards, id: \.path) { dashboard in
+                        ForEach(store.dashboards.filter { !$0.requireAdmin || displayContext.currentUser?.isAdmin == true }, id: \.path) { dashboard in
                             dashboardButton(dashboard)
                         }
                     }

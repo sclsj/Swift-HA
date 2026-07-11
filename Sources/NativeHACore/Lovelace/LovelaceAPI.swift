@@ -68,7 +68,7 @@ public final class HALovelaceConfigProvider: LovelaceConfigProvider {
     public func dashboardList() async throws -> [LovelaceDashboardReference] {
         let dashboards = try await api().dashboards()
         return dashboards.map {
-            LovelaceDashboardReference(path: $0.urlPath, title: $0.title, showInSidebar: $0.showInSidebar)
+            LovelaceDashboardReference(path: $0.urlPath, title: $0.title, showInSidebar: $0.showInSidebar, requireAdmin: $0.requireAdmin ?? false)
         }
     }
 
