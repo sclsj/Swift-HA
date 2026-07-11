@@ -4,6 +4,7 @@ import SwiftUI
 enum LovelaceCardRenderKind: Equatable {
     case nativePlaceholder
     case historyGraph
+    case statisticsGraph
     case verticalStack
     case fallback
     case error
@@ -40,6 +41,7 @@ struct LovelaceElementFactory {
     static let nativeCardTypes: Set<String> = [
         "entities",
         "history-graph",
+        "statistics-graph",
         "weather-forecast",
         "markdown",
         "vertical-stack",
@@ -54,6 +56,8 @@ struct LovelaceElementFactory {
             renderKind = .error
         } else if case .historyGraph = card {
             renderKind = .historyGraph
+        } else if case .statisticsGraph = card {
+            renderKind = .statisticsGraph
         } else if case .verticalStack = card {
             renderKind = .verticalStack
         } else if nativeCardTypes.contains(type) {
@@ -77,6 +81,8 @@ struct LovelaceElementFactory {
         case let .entities(config):
             return config.metadata
         case let .historyGraph(config):
+            return config.metadata
+        case let .statisticsGraph(config):
             return config.metadata
         case let .weatherForecast(config):
             return config.metadata
@@ -137,6 +143,8 @@ struct LovelaceElementFactory {
             return config.entities.compactMap(\.entity).first
         case let .historyGraph(config):
             return config.entities.compactMap(\.entity).first
+        case let .statisticsGraph(config):
+            return config.entities.compactMap(\.entity).first
         case let .weatherForecast(config):
             return config.entity
         case let .markdown(config):
@@ -158,6 +166,8 @@ struct LovelaceElementFactory {
         case let .entities(config):
             return config.title
         case let .historyGraph(config):
+            return config.title
+        case let .statisticsGraph(config):
             return config.title
         case let .weatherForecast(config):
             return config.name
@@ -201,6 +211,11 @@ struct LovelaceElementFactory {
             )
         case let .historyGraph(config):
             HistoryGraphCardView(
+                config: config,
+                displayContext: displayContext
+            )
+        case let .statisticsGraph(config):
+            StatisticsGraphCardView(
                 config: config,
                 displayContext: displayContext
             )
@@ -249,6 +264,8 @@ struct LovelaceElementFactory {
             case .nativePlaceholder:
                 NativePlaceholderCardView(card: card, descriptor: descriptor, states: displayContext.states)
             case .historyGraph:
+                NativePlaceholderCardView(card: card, descriptor: descriptor, states: displayContext.states)
+            case .statisticsGraph:
                 NativePlaceholderCardView(card: card, descriptor: descriptor, states: displayContext.states)
             case .fallback:
                 CardFallbackView(descriptor: descriptor)

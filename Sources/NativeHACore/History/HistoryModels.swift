@@ -210,6 +210,21 @@ public enum StatisticPeriod: String, Codable, Equatable {
     case month
 }
 
+public enum StatisticsGraphChartType: String, Codable, Equatable {
+    case line
+    case lineStack = "line-stack"
+    case bar
+    case barStack = "bar-stack"
+
+    public var isStacked: Bool {
+        self == .lineStack || self == .barStack
+    }
+
+    public var isBar: Bool {
+        self == .bar || self == .barStack
+    }
+}
+
 public struct StatisticValue: Codable, Equatable {
     public var start: Double
     public var end: Double

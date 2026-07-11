@@ -8,6 +8,7 @@ public protocol LovelaceCardConfigProtocol: Decodable, Equatable {
 public enum LovelaceCardConfig: Decodable, Equatable {
     case entities(EntitiesCardConfig)
     case historyGraph(HistoryGraphCardConfig)
+    case statisticsGraph(StatisticsGraphCardConfig)
     case weatherForecast(WeatherForecastCardConfig)
     case markdown(MarkdownCardConfig)
     case verticalStack(VerticalStackCardConfig)
@@ -20,6 +21,8 @@ public enum LovelaceCardConfig: Decodable, Equatable {
         case let .entities(config):
             return config.type
         case let .historyGraph(config):
+            return config.type
+        case let .statisticsGraph(config):
             return config.type
         case let .weatherForecast(config):
             return config.type
@@ -41,6 +44,8 @@ public enum LovelaceCardConfig: Decodable, Equatable {
         case let .entities(config):
             return config.raw
         case let .historyGraph(config):
+            return config.raw
+        case let .statisticsGraph(config):
             return config.raw
         case let .weatherForecast(config):
             return config.raw
@@ -72,6 +77,8 @@ public enum LovelaceCardConfig: Decodable, Equatable {
                 self = .entities(try EntitiesCardConfig(from: decoder))
             case "history-graph":
                 self = .historyGraph(try HistoryGraphCardConfig(from: decoder))
+            case "statistics-graph":
+                self = .statisticsGraph(try StatisticsGraphCardConfig(from: decoder))
             case "weather-forecast":
                 self = .weatherForecast(try WeatherForecastCardConfig(from: decoder))
             case "markdown":
@@ -409,6 +416,110 @@ public struct HistoryGraphCardConfig: LovelaceCardConfigProtocol {
             return []
         }
         return values.map { LovelaceGraphEntityConfig(raw: $0) }
+    }
+}
+
+public struct StatisticsGraphCardConfig: LovelaceCardConfigProtocol {
+    public var type: String
+    public var metadata: LovelaceCardMetadata
+    public var entities: [LovelaceGraphEntityConfig]
+    public var title: String?
+    public var daysToShow: Double?
+    public var period: StatisticPeriod?
+    public var statTypes: [StatisticType]?
+    public var chartType: StatisticsGraphChartType?
+    public var logarithmicScale: Bool?
+    public var minYAxis: Double?
+    public var maxYAxis: Double?
+    public var fitYData: Bool?
+    public var hideLegend: Bool?
+    public var expandLegend: Bool?
+    public var raw: HAJSONValue
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case entities
+        case title
+        case daysToShow = "days_to_show"
+        case period
+        case statTypes = "stat_types"
+        case chartType = "chart_type"
+        case logarithmicScale = "logarithmic_scale"
+        case minYAxis = "min_y_axis"
+        case maxYAxis = "max_y_axis"
+        case fitYData = "fit_y_data"
+        case hideLegend = "hide_legend"
+        case expandLegend = "expand_legend"
+    }
+
+    public init(from decoder: Decoder) throws {
+        raw = try HAJSONValue(from: decoder)
+        metadata = try LovelaceCardMetadata(from: decoder)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = try container.decodeLovelaceStringIfPresent(forKey: .type) ?? "statistics-graph"
+        entities = try Self.decodeEntities(from: container)
+        title = try container.decodeLovelaceStringIfPresent(forKey: .title)
+        daysToShow = try container.decodeLovelaceDoubleIfPresent(forKey: .daysToShow)
+        period = try Self.decodePeriod(from: container)
+        statTypes = try Self.decodeStatTypes(from: container)
+        chartType = try Self.decodeChartType(from: container)
+        logarithmicScale = try container.decodeLovelaceBoolIfPresent(forKey: .logarithmicScale)
+        minYAxis = try container.decodeLovelaceDoubleIfPresent(forKey: .minYAxis)
+        maxYAxis = try container.decodeLovelaceDoubleIfPresent(forKey: .maxYAxis)
+        fitYData = try container.decodeLovelaceBoolIfPresent(forKey: .fitYData)
+        hideLegend = try container.decodeLovelaceBoolIfPresent(forKey: .hideLegend)
+        expandLegend = try container.decodeLovelaceBoolIfPresent(forKey: .expandLegend)
+    }
+
+    private static func decodeEntities(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> [LovelaceGraphEntityConfig] {
+        guard let rawEntities = try container.decodeLovelaceJSONIfPresent(forKey: .entities),
+              case let .array(values) = rawEntities else {
+            return []
+        }
+        return values.map { LovelaceGraphEntityConfig(raw: $0) }
+    }
+
+    private static func decodePeriod(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> StatisticPeriod? {
+        guard let raw = try container.decodeLovelaceStringIfPresent(forKey: .period) else {
+            return nil
+        }
+        return StatisticPeriod(rawValue: raw)
+    }
+
+    private static func decodeChartType(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> StatisticsGraphChartType? {
+        guard let raw = try container.decodeLovelaceStringIfPresent(forKey: .chartType) else {
+            return nil
+        }
+        return StatisticsGraphChartType(rawValue: raw)
+    }
+
+    private static func decodeStatTypes(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> [StatisticType]? {
+        guard let rawStatTypes = try container.decodeLovelaceJSONIfPresent(forKey: .statTypes) else {
+            return nil
+        }
+
+        switch rawStatTypes {
+        case let .string(type):
+            return StatisticType(rawValue: type).map { [$0] }
+        case let .array(values):
+            let decoded = values.compactMap { value -> StatisticType? in
+                guard let raw = value.stringValue else {
+                    return nil
+                }
+                return StatisticType(rawValue: raw)
+            }
+            return decoded.isEmpty ? nil : decoded
+        default:
+            return nil
+        }
     }
 }
 

@@ -57,7 +57,7 @@ private struct RootShellView: View {
                 }
 
                 NavigationLink(tag: AppRoute.settings, selection: routeBinding) {
-                    RoutePlaceholderView(title: "Settings")
+                    settingsPanel
                 } label: {
                     Text("Settings")
                 }
@@ -105,8 +105,16 @@ private struct RootShellView: View {
         case let .moreInfo(entityID):
             RoutePlaceholderView(title: AppRoute.moreInfo(entityID: entityID).title)
         case .settings:
-            RoutePlaceholderView(title: "Settings")
+            settingsPanel
         }
+    }
+
+    private var settingsPanel: some View {
+        SettingsDashboardView(
+            stateStore: (environment.client as? HAConnection)?.stateStore,
+            registryStore: (environment.client as? HAConnection)?.registryStore,
+            serverURL: developmentServerURL
+        )
     }
 
     private func dashboardPanel(
@@ -201,6 +209,10 @@ private struct RootShellView: View {
             )
             throw error
         }
+    }
+
+    private var developmentServerURL: URL? {
+        try? environment.credentialProvider.credentials().serverURL
     }
 
     private func storeSummaryMetadata(_ summary: HomeAssistantStores?) -> [String: String] {

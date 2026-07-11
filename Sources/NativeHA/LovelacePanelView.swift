@@ -102,6 +102,7 @@ struct LovelacePanelView: View {
             onServiceCall: executeServiceCall
         )
         .environment(\.historyGraphDataProvider, historyGraphDataProvider)
+        .environment(\.statisticsGraphDataProvider, statisticsGraphDataProvider)
     }
 
     private var markdownTemplateSubscriber: MarkdownTemplateSubscribing? {
@@ -116,6 +117,13 @@ struct LovelacePanelView: View {
             return nil
         }
         return HomeAssistantHistoryGraphDataProvider(client: client)
+    }
+
+    private var statisticsGraphDataProvider: StatisticsGraphDataProviding? {
+        guard let client = (environment.client as? HAConnection)?.client else {
+            return nil
+        }
+        return HomeAssistantStatisticsGraphDataProvider(client: client)
     }
 
     private func executeServiceCall(_ call: HAServiceCall) {

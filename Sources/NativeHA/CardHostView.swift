@@ -136,6 +136,8 @@ struct NativePlaceholderCardView: View {
             return "Entities"
         case .historyGraph:
             return "History graph"
+        case .statisticsGraph:
+            return "Statistics graph"
         case .weatherForecast:
             return "Weather"
         case .markdown:
@@ -176,6 +178,17 @@ struct NativePlaceholderCardView: View {
             var lines = ["\(entities.count) history entities"]
             if let hours = config.hoursToShow {
                 lines.append("window: \(formatHours(hours))")
+            }
+            let preview = previewList(entities)
+            if !preview.isEmpty {
+                lines.append(preview)
+            }
+            return lines
+        case let .statisticsGraph(config):
+            let entities = config.entities.compactMap(\.entity)
+            var lines = ["\(entities.count) statistics entities"]
+            if let days = config.daysToShow {
+                lines.append("window: \(formatDays(days))")
             }
             let preview = previewList(entities)
             if !preview.isEmpty {
@@ -231,5 +244,12 @@ struct NativePlaceholderCardView: View {
             return "\(Int(hours))h"
         }
         return "\(hours)h"
+    }
+
+    private func formatDays(_ days: Double) -> String {
+        if days.rounded() == days {
+            return "\(Int(days))d"
+        }
+        return "\(days)d"
     }
 }

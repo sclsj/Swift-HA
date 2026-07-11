@@ -25,6 +25,10 @@ final class LiveServerSmokeTests: XCTestCase {
         let states = await MainActor.run { connection.stateStore.states }
         let entities = connection.registryStore.entities
         let devices = connection.registryStore.devices
+        let entityRegistry = connection.registryStore.entityRegistry
+        let config = await MainActor.run { connection.stateStore.config }
+        let panels = await MainActor.run { connection.stateStore.panels }
+        let currentUser = await MainActor.run { connection.stateStore.currentUser }
         
         print("=== LIVE SERVER DATA ===")
         print("Loaded \(states.count) states")
@@ -34,6 +38,26 @@ final class LiveServerSmokeTests: XCTestCase {
         
         XCTAssertGreaterThan(states.count, 0, "Should have loaded some states from live server")
         XCTAssertGreaterThan(entities.count, 0, "Should have loaded some registered entities")
+
+        let settingsStart = Date()
+        let settingsModel = SettingsDashboardModel(context: SettingsDashboardContext(
+            serverURL: try? provider.credentials().serverURL,
+            connectionState: .connected,
+            stores: connection.storeSummary,
+            config: config,
+            currentUser: currentUser,
+            states: states,
+            panels: panels,
+            registryEntries: entities,
+            entityRegistryEntries: entityRegistry,
+            devices: devices
+        ))
+        let settingsElapsedMilliseconds = Date().timeIntervalSince(settingsStart) * 1_000
+        XCTAssertFalse(settingsModel.summary.title.isEmpty)
+        if currentUser?.isAdmin == true {
+            XCTAssertFalse(settingsModel.sections.isEmpty)
+        }
+        print(String(format: "Built settings dashboard model with %d sections in %.2f ms", settingsModel.sections.count, settingsElapsedMilliseconds))
 
         let climateStates = states.values.filter {
             EntityIDParser.domain(from: $0.entityID) == "climate"

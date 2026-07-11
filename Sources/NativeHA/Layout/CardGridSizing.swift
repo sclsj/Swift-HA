@@ -65,6 +65,8 @@ enum CardGridSizing {
             return max(1, 1 + Int(ceil(Double(config.entities.count) / 3.0)))
         case .historyGraph:
             return 3
+        case .statisticsGraph:
+            return 3
         case let .weatherForecast(config):
             return config.showForecast == true ? 3 : 2
         case let .markdown(config):
