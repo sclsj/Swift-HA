@@ -80,8 +80,8 @@ public final class HAConnection: HAClientProtocol, HAReconnectEventSource {
         let client = try resolvedClient()
         installReconnectRefresh(on: client)
         try await client.connect()
-        try await refreshStores()
         try await subscribeToUpdates()
+        try await refreshStores()
     }
 
     public func disconnect() async {
@@ -224,6 +224,7 @@ public final class HAConnection: HAClientProtocol, HAReconnectEventSource {
                     return
                 }
                 do {
+                    try await self.subscribeToUpdates()
                     try await self.refreshStores()
                 } catch {
                     self.logger?.warning(

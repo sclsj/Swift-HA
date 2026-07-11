@@ -10,6 +10,8 @@ public final class HAStateStore: ObservableObject {
     @Published public private(set) var userData: [String: HAJSONValue]
     @Published public private(set) var systemData: [String: HAJSONValue]
 
+    @MainActor private var bufferedStateEvents: [HAEvent<HAStateChangedEventData>]? = nil
+
     public init(
         config: HAConfig? = nil,
         states: [EntityID: HassEntity] = [:],
@@ -29,37 +31,44 @@ public final class HAStateStore: ObservableObject {
     }
 
     public func refresh(using client: HAWebSocketClientProtocol) async throws {
-        async let config: HAConfig = client.callWS(HAWebSocketRequest(type: "get_config"))
-        async let stateList: [HassEntity] = client.callWS(HAWebSocketRequest(type: "get_states"))
-        async let services: HAServices = client.callWS(HAWebSocketRequest(type: "get_services"))
-        async let panels: HAPanels = client.callWS(HAWebSocketRequest(type: "get_panels"))
-        async let currentUser: HAUser = client.callWS(HAWebSocketRequest(type: "auth/current_user"))
-        async let userData: HAFrontendDataResponse = client.callWS(
-            HAWebSocketRequest(type: "frontend/get_user_data", payload: ["key": .string("core")])
-        )
-        async let systemData: HAFrontendDataResponse = client.callWS(
-            HAWebSocketRequest(type: "frontend/get_system_data", payload: ["key": .string("core")])
-        )
+        await MainActor.run { self.bufferedStateEvents = [] }
+        
+        do {
+            async let config: HAConfig = client.callWS(HAWebSocketRequest(type: "get_config"))
+            async let stateList: [HassEntity] = client.callWS(HAWebSocketRequest(type: "get_states"))
+            async let services: HAServices = client.callWS(HAWebSocketRequest(type: "get_services"))
+            async let panels: HAPanels = client.callWS(HAWebSocketRequest(type: "get_panels"))
+            async let currentUser: HAUser = client.callWS(HAWebSocketRequest(type: "auth/current_user"))
+            async let userData: HAFrontendDataResponse = client.callWS(
+                HAWebSocketRequest(type: "frontend/get_user_data", payload: ["key": .string("core")])
+            )
+            async let systemData: HAFrontendDataResponse = client.callWS(
+                HAWebSocketRequest(type: "frontend/get_system_data", payload: ["key": .string("core")])
+            )
 
-        let resolved = try await (
-            config,
-            stateList,
-            services,
-            panels,
-            currentUser,
-            userData,
-            systemData
-        )
+            let resolved = try await (
+                config,
+                stateList,
+                services,
+                panels,
+                currentUser,
+                userData,
+                systemData
+            )
 
-        await apply(
-            config: resolved.0,
-            states: resolved.1,
-            services: resolved.2,
-            panels: resolved.3,
-            currentUser: resolved.4,
-            userData: resolved.5.value ?? [:],
-            systemData: resolved.6.value ?? [:]
-        )
+            await apply(
+                config: resolved.0,
+                states: resolved.1,
+                services: resolved.2,
+                panels: resolved.3,
+                currentUser: resolved.4,
+                userData: resolved.5.value ?? [:],
+                systemData: resolved.6.value ?? [:]
+            )
+        } catch {
+            await MainActor.run { self.bufferedStateEvents = nil }
+            throw error
+        }
     }
 
     @MainActor
@@ -93,6 +102,13 @@ public final class HAStateStore: ObservableObject {
         if let systemData = systemData {
             self.systemData = systemData
         }
+        
+        if let buffer = bufferedStateEvents {
+            bufferedStateEvents = nil
+            for event in buffer {
+                self.apply(stateChanged: event)
+            }
+        }
     }
 
     @MainActor
@@ -100,6 +116,11 @@ public final class HAStateStore: ObservableObject {
         guard event.eventType == "state_changed" else {
             return
         }
+        if bufferedStateEvents != nil {
+            bufferedStateEvents?.append(event)
+            return
+        }
+        
         if let newState = event.data.newState {
             states[event.data.entityID] = newState
         } else {

@@ -60,6 +60,7 @@ public struct AppEnvironment {
     public var logger: Logger
     public var credentialProvider: CredentialProvider
     public var platform: PlatformTraits
+    public var reconnectEventSource: HAReconnectEventSource
 
     public init(
         client: HAClientProtocol,
@@ -68,7 +69,8 @@ public struct AppEnvironment {
         clock: Clock,
         logger: Logger,
         credentialProvider: CredentialProvider,
-        platform: PlatformTraits
+        platform: PlatformTraits,
+        reconnectEventSource: HAReconnectEventSource = PlaceholderHAReconnectEventSource()
     ) {
         self.client = client
         self.lovelaceConfigProvider = lovelaceConfigProvider
@@ -77,6 +79,7 @@ public struct AppEnvironment {
         self.logger = logger
         self.credentialProvider = credentialProvider
         self.platform = platform
+        self.reconnectEventSource = reconnectEventSource
     }
 
     public static func development(
@@ -101,7 +104,8 @@ public struct AppEnvironment {
             clock: SystemClock(),
             logger: logger,
             credentialProvider: credentialProvider,
-            platform: PlatformTraits.current
+            platform: PlatformTraits.current,
+            reconnectEventSource: connection
         )
     }
 }

@@ -200,6 +200,7 @@ public final class LovelaceStore: ObservableObject {
 
     private let configProvider: LovelaceConfigProvider
     private let updateEventSource: LovelaceUpdateEventSource
+    private let reconnectEventSource: HAReconnectEventSource
     private let router: LovelaceRouter
     private let clock: Clock?
     private let logger: Logger?
@@ -207,6 +208,7 @@ public final class LovelaceStore: ObservableObject {
     private var requestedViewPath: String?
     private var requestedViewIndex: Int?
     private var updateSubscription: LovelaceUpdateSubscription?
+    private var reconnectSubscription: HAReconnectSubscription?
     private var loadGeneration = 0
 
     public init(
@@ -215,10 +217,12 @@ public final class LovelaceStore: ObservableObject {
         router: LovelaceRouter = LovelaceRouter(),
         clock: Clock? = nil,
         logger: Logger? = nil,
-        currentUserID: String? = nil
+        currentUserID: String? = nil,
+        reconnectEventSource: HAReconnectEventSource = PlaceholderHAReconnectEventSource()
     ) {
         self.configProvider = configProvider
         self.updateEventSource = updateEventSource
+        self.reconnectEventSource = reconnectEventSource
         self.router = router
         self.clock = clock
         self.logger = logger
@@ -226,6 +230,13 @@ public final class LovelaceStore: ObservableObject {
         self.dashboards = []
         self.currentDashboardPath = "/lovelace"
         self.currentUserID = currentUserID
+        
+        self.reconnectSubscription = self.reconnectEventSource.subscribeReconnects { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.cancelUpdateSubscription()
+                await self?.refetch()
+            }
+        }
     }
 
     public convenience init(environment: AppEnvironment) {
@@ -233,12 +244,14 @@ public final class LovelaceStore: ObservableObject {
             configProvider: environment.lovelaceConfigProvider,
             updateEventSource: environment.lovelaceUpdateEventSource,
             clock: environment.clock,
-            logger: environment.logger
+            logger: environment.logger,
+            reconnectEventSource: environment.reconnectEventSource
         )
     }
 
     deinit {
         updateSubscription?.cancel()
+        reconnectSubscription?.cancel()
     }
 
     public func load(
