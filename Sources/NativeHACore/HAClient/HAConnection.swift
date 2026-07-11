@@ -113,6 +113,7 @@ public final class HAConnection: HAClientProtocol, HAReconnectEventSource {
         }
     }
 
+    @MainActor
     public var storeSummary: HomeAssistantStores {
         HomeAssistantStores(
             statesCount: stateStore.states.count,

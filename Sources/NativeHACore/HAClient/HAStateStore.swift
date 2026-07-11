@@ -107,6 +107,7 @@ public final class HAStateStore: ObservableObject {
         }
     }
 
+    @MainActor
     public var summary: HomeAssistantStores {
         HomeAssistantStores(
             statesCount: states.count,

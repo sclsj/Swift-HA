@@ -151,6 +151,26 @@ final class LovelaceStoreRouterTests: XCTestCase {
     }
 
     @MainActor
+    func testStoreIgnoresStaleDashboardLoadAfterNewerRouteWins() async throws {
+        let provider = DelayedLovelaceConfigProvider()
+        let store = LovelaceStore(configProvider: provider)
+
+        let slowLoad = Task {
+            await store.load(dashboardPath: "/slow")
+        }
+        await provider.waitForConfigurationRequest("/slow")
+
+        await store.load(dashboardPath: "/fast")
+        XCTAssertEqual(try XCTUnwrap(store.state.loadedDashboard).dashboardPath, "/fast")
+
+        provider.finishSlowConfiguration()
+        await slowLoad.value
+
+        XCTAssertEqual(try XCTUnwrap(store.state.loadedDashboard).dashboardPath, "/fast")
+        XCTAssertEqual(provider.configurationRequests(), ["/slow", "/fast"])
+    }
+
+    @MainActor
     func testMapStrategyDashboardBecomesPlaceholder() async throws {
         let provider = SnapshotLovelaceConfigProvider(snapshotDirectory: snapshotDirectory)
         let store = LovelaceStore(configProvider: provider)
@@ -290,6 +310,82 @@ private final class MockLovelaceUpdateSubscription: LovelaceUpdateSubscription {
 
     func cancel() {
         isCancelled = true
+    }
+}
+
+private final class DelayedLovelaceConfigProvider: LovelaceConfigProvider {
+    private let lock = NSLock()
+    private var requestedConfigurations: [String] = []
+    private var requestWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+    private var slowConfigurationContinuation: CheckedContinuation<LovelaceConfiguration, Error>?
+
+    func dashboardList() async throws -> [LovelaceDashboardReference] {
+        [
+            LovelaceDashboardReference(path: "/slow", title: "Slow"),
+            LovelaceDashboardReference(path: "/fast", title: "Fast")
+        ]
+    }
+
+    func configuration(for dashboardPath: String) async throws -> LovelaceConfiguration {
+        let normalizedPath = AppRoute.dashboardPath(dashboardPath)
+        recordConfigurationRequest(normalizedPath)
+
+        if normalizedPath == "/slow" {
+            return try await withCheckedThrowingContinuation { continuation in
+                lock.lock()
+                slowConfigurationContinuation = continuation
+                lock.unlock()
+            }
+        }
+
+        return Self.configuration(path: normalizedPath)
+    }
+
+    func waitForConfigurationRequest(_ dashboardPath: String) async {
+        let normalizedPath = AppRoute.dashboardPath(dashboardPath)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            if requestedConfigurations.contains(normalizedPath) {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                requestWaiters[normalizedPath, default: []].append(continuation)
+                lock.unlock()
+            }
+        }
+    }
+
+    func finishSlowConfiguration() {
+        lock.lock()
+        let continuation = slowConfigurationContinuation
+        slowConfigurationContinuation = nil
+        lock.unlock()
+        continuation?.resume(returning: Self.configuration(path: "/slow"))
+    }
+
+    func configurationRequests() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requestedConfigurations
+    }
+
+    private func recordConfigurationRequest(_ dashboardPath: String) {
+        lock.lock()
+        requestedConfigurations.append(dashboardPath)
+        let waiters = requestWaiters.removeValue(forKey: dashboardPath) ?? []
+        lock.unlock()
+
+        waiters.forEach { $0.resume() }
+    }
+
+    private static func configuration(path: String) -> LovelaceConfiguration {
+        LovelaceConfiguration(
+            dashboardPath: path,
+            config: .config(LovelaceConfig(
+                views: [LovelaceViewConfig(path: "default")],
+                raw: .object([:])
+            ))
+        )
     }
 }
 

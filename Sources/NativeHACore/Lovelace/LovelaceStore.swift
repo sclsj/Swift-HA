@@ -207,6 +207,7 @@ public final class LovelaceStore: ObservableObject {
     private var requestedViewPath: String?
     private var requestedViewIndex: Int?
     private var updateSubscription: LovelaceUpdateSubscription?
+    private var loadGeneration = 0
 
     public init(
         configProvider: LovelaceConfigProvider,
@@ -247,6 +248,9 @@ public final class LovelaceStore: ObservableObject {
         userID: String? = nil
     ) async {
         let normalizedDashboardPath = AppRoute.dashboardPath(dashboardPath)
+        loadGeneration += 1
+        let currentLoadGeneration = loadGeneration
+
         currentDashboardPath = normalizedDashboardPath
         requestedViewPath = viewPath
         requestedViewIndex = viewIndex
@@ -254,12 +258,21 @@ public final class LovelaceStore: ObservableObject {
         state = .loading(dashboardPath: normalizedDashboardPath)
 
         await ensureUpdateSubscription()
+        guard shouldApplyLoad(generation: currentLoadGeneration) else {
+            return
+        }
 
         do {
             let fetchedDashboards = try await configProvider.dashboardList()
-            dashboards = fetchedDashboards
+            try Task.checkCancellation()
 
             let configuration = try await configProvider.configuration(for: normalizedDashboardPath)
+            try Task.checkCancellation()
+            guard shouldApplyLoad(generation: currentLoadGeneration) else {
+                return
+            }
+
+            dashboards = fetchedDashboards
             try apply(
                 configuration: configuration,
                 dashboardPath: normalizedDashboardPath,
@@ -267,7 +280,14 @@ public final class LovelaceStore: ObservableObject {
                 viewPath: viewPath,
                 viewIndex: viewIndex
             )
+        } catch is CancellationError {
+            if shouldApplyLoad(generation: currentLoadGeneration) {
+                state = .idle
+            }
         } catch {
+            guard shouldApplyLoad(generation: currentLoadGeneration) else {
+                return
+            }
             state = .error(LovelaceDashboardError(
                 dashboardPath: normalizedDashboardPath,
                 message: Self.errorMessage(from: error)
@@ -399,6 +419,10 @@ public final class LovelaceStore: ObservableObject {
             content.config.views.indices.contains(index) ? content.config.views[index] : nil
         }
         state = .loaded(content)
+    }
+
+    private func shouldApplyLoad(generation: Int) -> Bool {
+        generation == loadGeneration && !Task.isCancelled
     }
 
     private static func errorMessage(from error: Error) -> String {

@@ -78,10 +78,13 @@ public enum StatisticsSeriesBuilder {
                 let pointValues = availableTypes.map { type -> Double? in
                     switch type {
                     case .sum:
-                        if let baseline = firstSum {
-                            return (value.sum ?? 0) - baseline
+                        guard let sum = finite(value.sum) else {
+                            return nil
                         }
-                        firstSum = value.sum
+                        if let baseline = firstSum {
+                            return sum - baseline
+                        }
+                        firstSum = sum
                         return 0
                     case .change:
                         return finite(value.change)

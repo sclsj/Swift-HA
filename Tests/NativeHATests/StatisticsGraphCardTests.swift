@@ -246,6 +246,28 @@ final class StatisticsGraphCardTests: XCTestCase {
         XCTAssertEqual(result.yAxis.maximum, 24)
     }
 
+    func testSparseSumStatisticsCreateNullGapsInsteadOfSyntheticDeltas() {
+        let result = StatisticsSeriesBuilder.buildSeries(
+            statistics: [
+                "sensor.energy": [
+                    StatisticValue(start: 1_000, end: 2_000, sum: 10),
+                    StatisticValue(start: 2_000, end: 3_000),
+                    StatisticValue(start: 3_000, end: 4_000, sum: 15)
+                ]
+            ],
+            metadata: ["sensor.energy": metadata("sensor.energy", unit: "kWh", hasSum: true)],
+            statisticIDs: ["sensor.energy"],
+            statTypes: [.sum]
+        )
+
+        XCTAssertEqual(result.series.first?.points, [
+            LinePoint(x: 1_000, y: 0, source: .statistics),
+            LinePoint(x: 2_000, y: nil, source: .statistics),
+            LinePoint(x: 3_000, y: 5, source: .statistics),
+            LinePoint(x: 4_000, y: 5, source: .statistics)
+        ])
+    }
+
     func testRegressionUnknownCardFallbackUnchanged() throws {
         let unknown = try decodeCard("""
         {"type": "custom:apexcharts-card", "entity": "sensor.power"}

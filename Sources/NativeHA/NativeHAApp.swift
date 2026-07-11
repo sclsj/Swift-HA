@@ -168,15 +168,17 @@ private struct RootShellView: View {
 
             do {
                 try await environment.client.connect()
-                let summary = (environment.client as? HAConnection)?.storeSummary
+                let summary = await MainActor.run {
+                    (environment.client as? HAConnection)?.storeSummary
+                }
                 environment.logger.info(
                     "Connected to Home Assistant",
                     metadata: storeSummaryMetadata(summary)
                 )
                 await MainActor.run {
                     appState.setConnectionState(.connected)
-                    if let connection = environment.client as? HAConnection {
-                        appState.updateStores(connection.storeSummary)
+                    if let summary = summary {
+                        appState.updateStores(summary)
                     }
                 }
             } catch {

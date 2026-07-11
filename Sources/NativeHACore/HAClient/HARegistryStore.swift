@@ -119,6 +119,7 @@ public final class HARegistryStore: ObservableObject {
         }
     }
 
+    @MainActor
     public var summary: HomeAssistantStores {
         HomeAssistantStores(
             entitiesCount: entities.count,
