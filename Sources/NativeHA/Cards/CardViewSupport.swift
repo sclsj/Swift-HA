@@ -38,15 +38,18 @@ struct EntityDisplayContext {
     var states: [EntityID: HassEntity]
     var config: HAConfig?
     var registryEntries: [EntityID: HAEntityRegistryDisplayEntry]
+    var currentUser: HAUser?
 
     init(
         states: [EntityID: HassEntity] = [:],
         config: HAConfig? = nil,
-        registryEntries: [EntityID: HAEntityRegistryDisplayEntry] = [:]
+        registryEntries: [EntityID: HAEntityRegistryDisplayEntry] = [:],
+        currentUser: HAUser? = nil
     ) {
         self.states = states
         self.config = config
         self.registryEntries = registryEntries
+        self.currentUser = currentUser
     }
 
     static let empty = EntityDisplayContext()
@@ -84,6 +87,7 @@ struct EntityDisplayContext {
 struct CardActionDispatcher {
     var entityID: EntityID?
     var states: [EntityID: HassEntity]
+    var currentUser: HAUser? = nil
     var onMoreInfo: (EntityID) -> Void
     var onServiceCall: (HAServiceCall) -> Void
 
@@ -98,7 +102,7 @@ struct CardActionDispatcher {
             tapAction: tapAction,
             holdAction: holdAction,
             doubleTapAction: doubleTapAction,
-            context: LovelaceActionResolutionContext(entity: entityID, states: states)
+            context: LovelaceActionResolutionContext(entity: entityID, states: states, currentUser: currentUser)
         )
         perform(resolved)
     }
@@ -109,6 +113,15 @@ struct CardActionDispatcher {
             onMoreInfo(entityID)
         case let .callService(call):
             onServiceCall(call)
+        case let .confirmation(config, thenAction):
+            NotificationCenter.default.post(
+                name: .lovelaceActionRequiresConfirmation,
+                object: nil,
+                userInfo: [
+                    "config": config,
+                    "action": thenAction
+                ]
+            )
         default:
             break
         }

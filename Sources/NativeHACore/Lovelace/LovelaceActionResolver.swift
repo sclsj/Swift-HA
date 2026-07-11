@@ -11,17 +11,20 @@ public struct LovelaceActionResolutionContext {
     public var cameraImage: EntityID?
     public var imageEntity: EntityID?
     public var states: [EntityID: HassEntity]
+    public var currentUser: HAUser?
 
     public init(
         entity: EntityID? = nil,
         cameraImage: EntityID? = nil,
         imageEntity: EntityID? = nil,
-        states: [EntityID: HassEntity] = [:]
+        states: [EntityID: HassEntity] = [:],
+        currentUser: HAUser? = nil
     ) {
         self.entity = entity
         self.cameraImage = cameraImage
         self.imageEntity = imageEntity
         self.states = states
+        self.currentUser = currentUser
     }
 }
 
@@ -32,6 +35,7 @@ public enum LovelaceResolvedAction: Equatable {
     case openURL(String)
     case assist(startListening: Bool, pipelineID: String)
     case fireDOMEvent(LovelaceActionConfig)
+    indirect case confirmation(LovelaceConfirmationRestrictionConfig, then: LovelaceResolvedAction)
     case none(reason: String)
     case unsupported(action: String)
 }
@@ -83,57 +87,68 @@ public enum LovelaceActionResolver {
         _ actionConfig: LovelaceActionConfig,
         context: LovelaceActionResolutionContext
     ) -> LovelaceResolvedAction {
+        let resolvedAction: LovelaceResolvedAction
+
         switch normalizedAction(actionConfig.action) {
         case "more-info":
-            guard let entityID = actionConfig.entity ?? context.entity ?? context.cameraImage ?? context.imageEntity else {
-                return .none(reason: "Missing entity for more-info action.")
+            if let entityID = actionConfig.entity ?? context.entity ?? context.cameraImage ?? context.imageEntity {
+                resolvedAction = .moreInfo(entityID: entityID)
+            } else {
+                resolvedAction = .none(reason: "Missing entity for more-info action.")
             }
-            return .moreInfo(entityID: entityID)
 
         case "navigate":
-            guard let path = actionConfig.navigationPath, !path.isEmpty else {
-                return .none(reason: "Missing navigation path.")
+            if let path = actionConfig.navigationPath, !path.isEmpty {
+                resolvedAction = .navigate(path: path, replace: actionConfig.navigationReplace ?? false)
+            } else {
+                resolvedAction = .none(reason: "Missing navigation path.")
             }
-            return .navigate(path: path, replace: actionConfig.navigationReplace ?? false)
 
         case "url":
-            guard let url = actionConfig.urlPath, !url.isEmpty else {
-                return .none(reason: "Missing URL path.")
+            if let url = actionConfig.urlPath, !url.isEmpty {
+                resolvedAction = .openURL(url)
+            } else {
+                resolvedAction = .none(reason: "Missing URL path.")
             }
-            return .openURL(url)
 
         case "toggle":
-            guard let entityID = context.entity else {
-                return .none(reason: "Missing entity for toggle action.")
+            if let entityID = context.entity {
+                let currentState = context.states[entityID]?.state ?? HAStateValue.unknown
+                resolvedAction = .callService(HADomainLogic.toggleServiceCall(entityID: entityID, currentState: currentState))
+            } else {
+                resolvedAction = .none(reason: "Missing entity for toggle action.")
             }
-            let currentState = context.states[entityID]?.state ?? HAStateValue.unknown
-            return .callService(HADomainLogic.toggleServiceCall(entityID: entityID, currentState: currentState))
 
         case "perform-action", "call-service":
-            guard let serviceID = actionConfig.performAction ?? actionConfig.service else {
-                return .none(reason: "Missing service action.")
+            if let serviceID = actionConfig.performAction ?? actionConfig.service,
+               let serviceCall = explicitServiceCall(
+                   serviceID: serviceID,
+                   data: actionConfig.data ?? actionConfig.serviceData ?? [:],
+                   target: actionConfig.target
+               ) {
+                resolvedAction = .callService(serviceCall)
+            } else {
+                resolvedAction = .none(reason: "Invalid or missing service action.")
             }
-            guard let serviceCall = explicitServiceCall(
-                serviceID: serviceID,
-                data: actionConfig.data ?? actionConfig.serviceData ?? [:],
-                target: actionConfig.target
-            ) else {
-                return .none(reason: "Invalid service action '\(serviceID)'.")
-            }
-            return .callService(serviceCall)
 
         case "assist":
-            return .assist(
+            resolvedAction = .assist(
                 startListening: actionConfig.startListening ?? false,
                 pipelineID: actionConfig.pipelineID ?? "last_used"
             )
 
         case "fire-dom-event":
-            return .fireDOMEvent(actionConfig)
+            resolvedAction = .fireDOMEvent(actionConfig)
 
         case let action:
-            return .unsupported(action: action)
+            resolvedAction = .unsupported(action: action)
         }
+
+        if let confirmation = actionConfig.confirmation, !isExempt(confirmation, user: context.currentUser) {
+            return .confirmation(confirmation, then: resolvedAction)
+        }
+
+        return resolvedAction
     }
 
     public static func serviceCallForTurnOnOff(
@@ -183,5 +198,15 @@ public enum LovelaceActionResolver {
             "valve",
             "water_heater"
         ].contains(domain)
+    }
+
+    private static func isExempt(_ confirmation: LovelaceConfirmationRestrictionConfig, user: HAUser?) -> Bool {
+        guard let exemptions = confirmation.exemptions, !exemptions.isEmpty else {
+            return false
+        }
+        guard let userID = user?.id else {
+            return false
+        }
+        return exemptions.contains { $0.user == userID }
     }
 }

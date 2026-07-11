@@ -15,6 +15,10 @@ struct LovelaceRootView: View {
     var onMoreInfo: (EntityID) -> Void = { _ in }
     var onServiceCall: (HAServiceCall) -> Void = { _ in }
 
+    @State private var showConfirmationAlert = false
+    @State private var pendingConfirmationConfig: LovelaceConfirmationRestrictionConfig?
+    @State private var pendingConfirmationAction: LovelaceResolvedAction?
+
     var body: some View {
         HStack(spacing: 0) {
             dashboardList
@@ -36,6 +40,37 @@ struct LovelaceRootView: View {
         }
         .task(id: userID ?? "") {
             store.setCurrentUserID(userID)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .lovelaceActionRequiresConfirmation)) { notification in
+            if let config = notification.userInfo?["config"] as? LovelaceConfirmationRestrictionConfig,
+               let action = notification.userInfo?["action"] as? LovelaceResolvedAction {
+                pendingConfirmationConfig = config
+                pendingConfirmationAction = action
+                showConfirmationAlert = true
+            }
+        }
+        .alert(isPresented: $showConfirmationAlert) {
+            Alert(
+                title: Text(pendingConfirmationConfig?.title ?? "Confirmation"),
+                message: Text(pendingConfirmationConfig?.text ?? "Are you sure you want to run this action?"),
+                primaryButton: .default(Text(pendingConfirmationConfig?.confirmText ?? "Confirm")) {
+                    if let action = pendingConfirmationAction {
+                        performResolvedAction(action)
+                    }
+                },
+                secondaryButton: .cancel(Text(pendingConfirmationConfig?.dismissText ?? "Cancel"))
+            )
+        }
+    }
+
+    private func performResolvedAction(_ action: LovelaceResolvedAction) {
+        switch action {
+        case let .moreInfo(entityID):
+            onMoreInfo(entityID)
+        case let .callService(call):
+            onServiceCall(call)
+        default:
+            break
         }
     }
 

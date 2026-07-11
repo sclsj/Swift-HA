@@ -174,7 +174,7 @@ struct TileCardView: View {
 
     static func isActionable(_ action: LovelaceResolvedAction) -> Bool {
         switch action {
-        case .moreInfo, .callService, .navigate, .openURL, .assist, .fireDOMEvent:
+        case .moreInfo, .callService, .navigate, .openURL, .assist, .fireDOMEvent, .confirmation:
             return true
         case .none, .unsupported:
             return false
