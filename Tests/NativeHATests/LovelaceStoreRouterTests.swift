@@ -23,6 +23,29 @@ final class LovelaceStoreRouterTests: XCTestCase {
         XCTAssertFalse(router.isVisible(restricted, userID: nil))
     }
 
+    func testRoutingSelectsZeroIndexWhenExplicitRequestIsMissing() {
+        let router = LovelaceRouter()
+        let config = LovelaceConfig(
+            views: [
+                LovelaceViewConfig(path: "private", visible: .bool(false)),
+                LovelaceViewConfig(path: "public", visible: .bool(true))
+            ],
+            raw: .object([:])
+        )
+        
+        // If explicitly requested view is not found, fallback to 0 (regardless of visibility)
+        XCTAssertEqual(
+            router.route(dashboardPath: "/lovelace", config: config, requestedViewPath: "missing", userID: nil).selectedViewIndex,
+            0
+        )
+        
+        // If no explicit request, fallback to first visible view
+        XCTAssertEqual(
+            router.route(dashboardPath: "/lovelace", config: config, requestedViewPath: nil, userID: nil).selectedViewIndex,
+            1
+        )
+    }
+
     func testRoutingDoesNotSelectRestrictedViewWithoutMatchingUser() {
         let router = LovelaceRouter()
         let config = LovelaceConfig(
@@ -36,6 +59,7 @@ final class LovelaceStoreRouterTests: XCTestCase {
             raw: .object([:])
         )
 
+        // With explicit request, bypass visibility gate
         XCTAssertEqual(
             router.route(
                 dashboardPath: "/lovelace",
@@ -43,16 +67,18 @@ final class LovelaceStoreRouterTests: XCTestCase {
                 requestedViewPath: "private",
                 userID: nil
             ).selectedViewPath,
-            "public"
+            "private"
         )
+        
+        // Without explicit request, fallback to public since private is restricted
         XCTAssertEqual(
             router.route(
                 dashboardPath: "/lovelace",
                 config: config,
-                requestedViewPath: "private",
-                userID: "user-a"
+                requestedViewPath: nil,
+                userID: nil
             ).selectedViewPath,
-            "private"
+            "public"
         )
     }
 
@@ -62,14 +88,14 @@ final class LovelaceStoreRouterTests: XCTestCase {
 
         await store.load(
             dashboardPath: "/lovelace",
-            viewPath: "private",
+            viewPath: nil,
             userID: "user-b"
         )
         XCTAssertEqual(try XCTUnwrap(store.state.loadedDashboard).selectedView?.path, "public")
 
         await store.load(
             dashboardPath: "/lovelace",
-            viewPath: "private",
+            viewPath: nil,
             userID: "user-a"
         )
         XCTAssertEqual(try XCTUnwrap(store.state.loadedDashboard).selectedView?.path, "private")

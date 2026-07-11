@@ -15,6 +15,27 @@ final class LovelaceModelAndAPITests: XCTestCase {
         XCTAssertEqual(dashboards.first { $0.urlPath == "dashboard-ultrasonic" }?.showInSidebar, true)
     }
 
+    func testLovelaceViewConfigLayoutPrecedence() throws {
+        XCTAssertEqual(LovelaceViewConfig(panel: false, type: "panel").layout, .panel)
+        XCTAssertEqual(LovelaceViewConfig(panel: true, type: "sidebar").layout, .sidebar)
+        XCTAssertEqual(LovelaceViewConfig(panel: true, type: "custom:test").layout, .custom("custom:test"))
+        
+        XCTAssertEqual(LovelaceViewConfig(panel: true).layout, .panel)
+        
+        // completely empty config falls back to .sections
+        XCTAssertEqual(LovelaceViewConfig().layout, .sections)
+        
+        let masonryConfig: LovelaceViewConfig = try decodeInline("""
+        {"cards": [{"type": "markdown", "content": "hello"}]}
+        """)
+        XCTAssertEqual(masonryConfig.layout, .masonry)
+
+        let sectionsConfig: LovelaceViewConfig = try decodeInline("""
+        {"sections": [{"cards": []}]}
+        """)
+        XCTAssertEqual(sectionsConfig.layout, .sections)
+    }
+
     func testDecodesOverviewDashboardCardsBadgesAndKeyFields() throws {
         let rawConfig: LovelaceRawConfig = try decodeSnapshot("lovelace_config_lovelace")
         guard case let .config(config) = rawConfig else {

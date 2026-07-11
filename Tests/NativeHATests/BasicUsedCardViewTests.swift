@@ -39,6 +39,11 @@ final class BasicUsedCardViewTests: XCTestCase {
         XCTAssertEqual(EntityRowView.kind(for: try row("\"sensor.temperature\"")), .sensor)
         XCTAssertEqual(EntityRowView.kind(for: try row("\"switch.power\"")), .toggle)
         XCTAssertEqual(EntityRowView.kind(for: try row("\"fan.air\"")), .toggle)
+        XCTAssertEqual(EntityRowView.kind(for: try row("\"light.room\"")), .toggle)
+        XCTAssertEqual(EntityRowView.kind(for: try row("\"humidifier.room\"")), .toggle)
+        XCTAssertEqual(EntityRowView.kind(for: try row("\"automation.script\"")), .toggle)
+        XCTAssertEqual(EntityRowView.kind(for: try row("\"input_boolean.test\"")), .toggle)
+        XCTAssertEqual(EntityRowView.kind(for: try row("\"script.run\"")), .toggle)
         XCTAssertEqual(EntityRowView.kind(for: try row("\"button.restart\"")), .button)
         XCTAssertEqual(EntityRowView.kind(for: try row("\"person.joy\"")), .simple)
 

@@ -343,7 +343,7 @@ final class Module12TileActionTests: XCTestCase {
         )
     }
 
-    func testClimateTileDefaultsOpenMoreInfoAndDoNotToggleIcon() throws {
+    func testClimateTileDefaultsToToggle() throws {
         let config = try tileConfig("""
         {"type": "tile", "entity": "climate.demo"}
         """)
@@ -364,7 +364,11 @@ final class Module12TileActionTests: XCTestCase {
                 entityID: "climate.demo",
                 states: states
             ),
-            .none(reason: "No default icon action for climate.")
+            .callService(HAServiceCall(
+                domain: "climate",
+                service: "turn_off",
+                serviceData: ["entity_id": .string("climate.demo")]
+            ))
         )
     }
 

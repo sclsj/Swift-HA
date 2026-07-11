@@ -102,6 +102,13 @@ final class SettingsDashboardTests: XCTestCase {
         ))
         let nonAdminTitles = nonAdmin.sections.flatMap(\.items).map(\.title)
         XCTAssertEqual(nonAdminTitles, ["Home Assistant Cloud"])
+
+        let noBluetoothEntriesModel = SettingsDashboardModel(context: adminContext(
+            components: ["bluetooth"],
+            hasBluetoothConfigEntries: false
+        ))
+        let noBluetoothTitles = noBluetoothEntriesModel.sections.flatMap(\.items).map(\.title)
+        XCTAssertFalse(noBluetoothTitles.contains("Bluetooth"))
     }
 
     func testFallbackURLsAndSettingsRouterAreDeterministic() throws {
