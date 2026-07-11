@@ -23,8 +23,8 @@ final class LiveServerSmokeTests: XCTestCase {
         
         // Retrieve stores
         let states = await MainActor.run { connection.stateStore.states }
-        let entities = await connection.registryStore.entities
-        let devices = await connection.registryStore.devices
+        let entities = connection.registryStore.entities
+        let devices = connection.registryStore.devices
         
         print("=== LIVE SERVER DATA ===")
         print("Loaded \(states.count) states")
@@ -62,6 +62,93 @@ final class LiveServerSmokeTests: XCTestCase {
         
         // Disconnect cleanly
         print("Disconnecting...")
+        await connection.client?.disconnect()
+    }
+
+    func testLiveWriteRoomAC() async throws {
+        let serverPath = "/Users/jin/Documents/HA/ha_server.txt"
+        let tokenPath = "/Users/jin/Documents/HA/ha_apikey.txt"
+        
+        guard FileManager.default.fileExists(atPath: serverPath) && FileManager.default.fileExists(atPath: tokenPath) else {
+            throw XCTSkip("Skipping live server test because credentials files are missing.")
+        }
+        
+        let provider = FileCredentialProvider(serverFilePath: serverPath, tokenFilePath: tokenPath)
+        let connection = HAConnection(credentialProvider: provider)
+        
+        print("Connecting to actual server for write test...")
+        try await connection.connect()
+        
+        let states = await MainActor.run { connection.stateStore.states }
+        guard let roomAC = states["climate.room_ac"] else {
+            print("climate.room_ac not found, skipping write test")
+            await connection.client?.disconnect()
+            throw XCTSkip("climate.room_ac not found")
+        }
+        
+        let hvacMode = roomAC.state
+        let temperature = roomAC.attributes["temperature"]?.haNumberValue
+        let targetTempHigh = roomAC.attributes["target_temp_high"]?.haNumberValue
+        let targetTempLow = roomAC.attributes["target_temp_low"]?.haNumberValue
+        let presetMode = roomAC.attributes["preset_mode"]?.haScalarStringValue
+        let fanMode = roomAC.attributes["fan_mode"]?.haScalarStringValue
+        let swingMode = roomAC.attributes["swing_mode"]?.haScalarStringValue
+        
+        print("--- Original State ---")
+        print("hvacMode: \(hvacMode)")
+        print("temperature: \(String(describing: temperature))")
+        print("targetTempHigh: \(String(describing: targetTempHigh))")
+        print("targetTempLow: \(String(describing: targetTempLow))")
+        print("presetMode: \(String(describing: presetMode))")
+        print("fanMode: \(String(describing: fanMode))")
+        print("swingMode: \(String(describing: swingMode))")
+        print("----------------------")
+        
+        guard hvacMode != "unavailable" && hvacMode != "unknown" else {
+            print("climate.room_ac is unavailable, skipping write test")
+            await connection.client?.disconnect()
+            throw XCTSkip("climate.room_ac is unavailable")
+        }
+
+        let model = ClimateControlModel(stateObj: roomAC)!
+        
+        // Write test
+        var callSucceeded = false
+        if let _ = temperature, let nextTemp = model.nextTemperature(delta: model.targetTemperatureStep) {
+            print("Writing next temp: \(nextTemp)")
+            if let call = model.setTemperatureCall(nextTemp) {
+                let result = try? await connection.serviceClient?.callService(
+                    domain: call.domain,
+                    service: call.service,
+                    serviceData: call.serviceData
+                )
+                if result != nil {
+                    callSucceeded = true
+                    print("set_temperature succeeded")
+                } else {
+                    print("set_temperature failed: \(String(describing: result))")
+                }
+            }
+        }
+        
+        // Restore
+        print("Restoring...")
+        if let temp = temperature, callSucceeded {
+            let result = try? await connection.serviceClient?.callService(
+                domain: "climate",
+                service: "set_temperature",
+                serviceData: ["entity_id": .string("climate.room_ac"), "temperature": .double(temp)]
+            )
+            print("restore set_temperature result: \(String(describing: result))")
+        }
+
+        // Wait a bit
+        try await Task.sleep(nanoseconds: 2_000_000_000)
+
+        let finalStates = await MainActor.run { connection.stateStore.states }
+        let finalAC = finalStates["climate.room_ac"]
+        print("Final temperature: \(String(describing: finalAC?.attributes["temperature"]?.haNumberValue))")
+        
         await connection.client?.disconnect()
     }
 }
