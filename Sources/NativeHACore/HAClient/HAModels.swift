@@ -658,3 +658,31 @@ public struct HAStateChangedEventData: Decodable {
         case newState = "new_state"
     }
 }
+
+public struct HAStateUpdatesEventData: Decodable {
+    public struct EntityState: Decodable {
+        public var s: String?
+        public var a: [String: HAJSONValue]?
+        public var c: HAJSONValue?
+        public var lc: Double?
+        public var lu: Double?
+    }
+
+    public struct EntityDiffRemove: Decodable {
+        public var a: [String]?
+    }
+
+    public struct EntityDiff: Decodable {
+        public var plus: EntityState?
+        public var minus: EntityDiffRemove?
+        
+        enum CodingKeys: String, CodingKey {
+            case plus = "+"
+            case minus = "-"
+        }
+    }
+
+    public var a: [String: EntityState]?
+    public var r: [String]?
+    public var c: [String: EntityDiff]?
+}

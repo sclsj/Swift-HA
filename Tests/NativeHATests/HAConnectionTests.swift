@@ -46,26 +46,19 @@ final class HAConnectionTests: XCTestCase {
         
         let json = """
         {
-            "event_type": "state_changed",
-            "data": {
-                "entity_id": "sensor.test",
-                "old_state": null,
-                "new_state": {
-                    "entity_id": "sensor.test",
-                    "state": "on",
-                    "attributes": {},
-                    "last_changed": "2026-07-06T00:00:00+00:00",
-                    "last_updated": "2026-07-06T00:00:00+00:00",
-                    "context": {"id": "c1", "parent_id": null, "user_id": null}
+            "a": {
+                "sensor.test": {
+                    "s": "on",
+                    "a": {},
+                    "lc": 1720224000,
+                    "lu": 1720224000,
+                    "c": "c1"
                 }
-            },
-            "origin": "LOCAL",
-            "time_fired": "2026-07-06T00:00:00+00:00",
-            "context": {"id": "c1", "parent_id": null, "user_id": null}
+            }
         }
         """
         
-        client.triggerEventJSON(json, forType: "state_changed")
+        client.triggerEventJSON(json, forType: "")
         
         // Let main actor process
         try await Task.sleep(nanoseconds: 300_000_000)
@@ -94,7 +87,7 @@ final class HAConnectionTests: XCTestCase {
         
         client.triggerEventJSON(json, forType: "entity_registry_updated")
         
-        try await Task.sleep(nanoseconds: 300_000_000)
+        try await Task.sleep(nanoseconds: 600_000_000)
         
         let refreshCalls = client.getAndResetCallCount("config/entity_registry/list")
         XCTAssertGreaterThan(refreshCalls, 0)

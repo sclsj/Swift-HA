@@ -151,13 +151,13 @@ public final class HAConnection: HAClientProtocol, HAReconnectEventSource {
         subscriptions.removeAll()
 
         let stateSubscription: HASubscription = try await client.subscribe(
-            HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string("state_changed")])
-        ) { [weak self] (event: HAEvent<HAStateChangedEventData>) in
+            HAWebSocketRequest(type: "subscribe_entities")
+        ) { [weak self] (updates: HAStateUpdatesEventData) in
             guard let stateStore = self?.stateStore else {
                 return
             }
             Task { @MainActor in
-                stateStore.apply(stateChanged: event)
+                stateStore.apply(updates: updates)
             }
         }
         subscriptions.append(stateSubscription)
@@ -253,18 +253,21 @@ public final class HAConnection: HAClientProtocol, HAReconnectEventSource {
         eventType: String,
         refresh: @escaping () async throws -> Void
     ) async throws {
+        let debouncer = TaskDebouncer(durationNanoseconds: 500_000_000)
         let subscription: HASubscription = try await client.subscribe(
             HAWebSocketRequest(type: "subscribe_events", payload: ["event_type": .string(eventType)])
         ) { [weak self] (_: HAEvent<[String: HAJSONValue]>) in
             let logger = self?.logger
             Task {
-                do {
-                    try await refresh()
-                } catch {
-                    logger?.warning(
-                        "Failed to refresh Home Assistant store after registry event",
-                        metadata: ["event_type": eventType, "error": String(describing: error)]
-                    )
+                await debouncer.debounce {
+                    do {
+                        try await refresh()
+                    } catch {
+                        logger?.warning(
+                            "Failed to refresh Home Assistant store after registry event",
+                            metadata: ["event_type": eventType, "error": String(describing: error)]
+                        )
+                    }
                 }
             }
         }

@@ -35,7 +35,6 @@ public final class HAStateStore: ObservableObject {
         
         do {
             async let config: HAConfig = client.callWS(HAWebSocketRequest(type: "get_config"))
-            async let stateList: [HassEntity] = client.callWS(HAWebSocketRequest(type: "get_states"))
             async let services: HAServices = client.callWS(HAWebSocketRequest(type: "get_services"))
             async let panels: HAPanels = client.callWS(HAWebSocketRequest(type: "get_panels"))
             async let currentUser: HAUser = client.callWS(HAWebSocketRequest(type: "auth/current_user"))
@@ -48,7 +47,6 @@ public final class HAStateStore: ObservableObject {
 
             let resolved = try await (
                 config,
-                stateList,
                 services,
                 panels,
                 currentUser,
@@ -58,12 +56,12 @@ public final class HAStateStore: ObservableObject {
 
             await apply(
                 config: resolved.0,
-                states: resolved.1,
-                services: resolved.2,
-                panels: resolved.3,
-                currentUser: resolved.4,
-                userData: resolved.5.value ?? [:],
-                systemData: resolved.6.value ?? [:]
+                states: nil,
+                services: resolved.1,
+                panels: resolved.2,
+                currentUser: resolved.3,
+                userData: resolved.4.value ?? [:],
+                systemData: resolved.5.value ?? [:]
             )
         } catch {
             await MainActor.run { self.bufferedStateEvents = nil }
@@ -102,29 +100,89 @@ public final class HAStateStore: ObservableObject {
         if let systemData = systemData {
             self.systemData = systemData
         }
-        
-        if let buffer = bufferedStateEvents {
-            bufferedStateEvents = nil
-            for event in buffer {
-                self.apply(stateChanged: event)
-            }
-        }
     }
 
     @MainActor
-    public func apply(stateChanged event: HAEvent<HAStateChangedEventData>) {
-        guard event.eventType == "state_changed" else {
-            return
-        }
-        if bufferedStateEvents != nil {
-            bufferedStateEvents?.append(event)
-            return
+    public func apply(updates: HAStateUpdatesEventData) {
+        if let additions = updates.a {
+            for (entityID, update) in additions {
+                let lastChanged = update.lc.flatMap { Date(timeIntervalSince1970: $0) } ?? Date()
+                let lastUpdated = update.lu.flatMap { Date(timeIntervalSince1970: $0) } ?? lastChanged
+                
+                var context = HAContext(id: "")
+                if let cValue = update.c {
+                    if let cStr = cValue.stringValue {
+                        context = HAContext(id: cStr, parentID: nil, userID: nil)
+                    } else if let cDict = cValue.objectValue {
+                        context = HAContext(
+                            id: cDict["id"]?.stringValue ?? "",
+                            parentID: cDict["parent_id"]?.stringValue,
+                            userID: cDict["user_id"]?.stringValue
+                        )
+                    }
+                }
+                
+                let state = HassEntity(
+                    entityID: entityID,
+                    state: update.s ?? "unknown",
+                    attributes: update.a ?? [:],
+                    lastChanged: lastChanged,
+                    lastUpdated: lastUpdated,
+                    context: context
+                )
+                states[entityID] = state
+            }
         }
         
-        if let newState = event.data.newState {
-            states[event.data.entityID] = newState
-        } else {
-            states.removeValue(forKey: event.data.entityID)
+        if let removals = updates.r {
+            for entityID in removals {
+                states.removeValue(forKey: entityID)
+            }
+        }
+        
+        if let changes = updates.c {
+            for (entityID, diff) in changes {
+                guard var entity = states[entityID] else { continue }
+                
+                if let toAdd = diff.plus {
+                    if let s = toAdd.s {
+                        entity.state = s
+                    }
+                    if let lc = toAdd.lc {
+                        let date = Date(timeIntervalSince1970: lc)
+                        entity.lastChanged = date
+                        entity.lastUpdated = date
+                    } else if let lu = toAdd.lu {
+                        entity.lastUpdated = Date(timeIntervalSince1970: lu)
+                    }
+                    
+                    if let a = toAdd.a {
+                        for (key, value) in a {
+                            entity.attributes[key] = value
+                        }
+                    }
+                    
+                    if let cValue = toAdd.c {
+                        if let cStr = cValue.stringValue {
+                            entity.context.id = cStr
+                        } else if let cDict = cValue.objectValue {
+                            if let id = cDict["id"]?.stringValue { entity.context.id = id }
+                            if let pid = cDict["parent_id"]?.stringValue { entity.context.parentID = pid }
+                            if let uid = cDict["user_id"]?.stringValue { entity.context.userID = uid }
+                        }
+                    }
+                }
+                
+                if let toRemove = diff.minus {
+                    if let a = toRemove.a {
+                        for key in a {
+                            entity.attributes.removeValue(forKey: key)
+                        }
+                    }
+                }
+                
+                states[entityID] = entity
+            }
         }
     }
 

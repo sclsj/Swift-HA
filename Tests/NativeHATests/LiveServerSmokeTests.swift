@@ -20,6 +20,7 @@ final class LiveServerSmokeTests: XCTestCase {
         // Connect and wait for the initial sync
         print("Connecting to actual server...")
         try await connection.connect()
+        try await Task.sleep(nanoseconds: 1_000_000_000)
         
         // Retrieve stores
         let states = await MainActor.run { connection.stateStore.states }
