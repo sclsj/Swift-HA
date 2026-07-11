@@ -404,11 +404,16 @@ final class HAWebSocketClientTests: XCTestCase {
         transport.enqueue("""
         {"type":"auth_ok","ha_version":"2026.5.4"}
         """)
+        struct MockCreds: CredentialProvider {
+            func credentials() throws -> HomeAssistantCredentials {
+                HomeAssistantCredentials(
+                    serverURL: URL(string: "http://homeassistant.local:8123")!,
+                    accessToken: "test-token"
+                )
+            }
+        }
         let client = HAWebSocketClient(
-            auth: HAAuth(credentials: HomeAssistantCredentials(
-                serverURL: URL(string: "http://homeassistant.local:8123")!,
-                accessToken: "test-token"
-            )),
+            credentialProvider: MockCreds(),
             transport: transport,
             pingConfiguration: nil
         )

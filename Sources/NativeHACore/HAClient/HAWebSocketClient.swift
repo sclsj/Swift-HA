@@ -213,7 +213,7 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
         }
     }
 
-    private let auth: HAAuth
+    private let credentialProvider: CredentialProvider
     private let transport: HAWebSocketTransport
     private let logger: Logger?
     private let pingConfiguration: HAPingConfiguration?
@@ -247,12 +247,12 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
     }
 
     public init(
-        auth: HAAuth,
+        credentialProvider: CredentialProvider,
         transport: HAWebSocketTransport = URLSessionHAWebSocketTransport(),
         logger: Logger? = nil,
         pingConfiguration: HAPingConfiguration? = HAPingConfiguration()
     ) {
-        self.auth = auth
+        self.credentialProvider = credentialProvider
         self.transport = transport
         self.logger = logger
         self.pingConfiguration = pingConfiguration
@@ -262,9 +262,11 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
         let isReconnect = hasConnectedSuccessfully
         shouldReconnect = true
         setConnectionState(.connecting)
+        
+        let auth = try HAAuth(credentialProvider: credentialProvider)
         try await transport.connect(url: auth.webSocketURL(), headers: [:])
         setConnectionState(.authenticating)
-        try await authenticate()
+        try await authenticate(auth: auth)
         setConnectionState(.connected)
         startReceiveLoop()
         try await replaySubscriptions()
@@ -381,7 +383,7 @@ public final class HAWebSocketClient: HAWebSocketClientProtocol, HAWebSocketReco
         let _: HAEmptyResponse = try await callWS(HAWebSocketRequest(type: "ping"))
     }
 
-    private func authenticate() async throws {
+    private func authenticate(auth: HAAuth) async throws {
         let authRequired = try await receiveIncomingMessage()
         guard authRequired.type == "auth_required" else {
             throw HAWebSocketClientError.authRequiredExpected

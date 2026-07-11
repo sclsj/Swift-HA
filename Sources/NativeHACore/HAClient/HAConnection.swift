@@ -134,8 +134,7 @@ public final class HAConnection: HAClientProtocol, HAReconnectEventSource {
             throw HAWebSocketClientError.disconnected
         }
 
-        let auth = try HAAuth(credentialProvider: credentialProvider)
-        let client = HAWebSocketClient(auth: auth, logger: logger)
+        let client = HAWebSocketClient(credentialProvider: credentialProvider, logger: logger)
         self.client = client
         self.serviceClient = HAServiceClient(client: client)
         return client
