@@ -190,6 +190,12 @@ private struct ClimateMoreInfoView: View {
 
     @State private var serviceError: String?
     @State private var isSending = false
+    @State private var localTarget: Double?
+    @State private var debounceTask: Task<Void, Never>?
+
+    private var currentTarget: Double {
+        localTarget ?? model.targetTemperature ?? 0
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -236,30 +242,52 @@ private struct ClimateMoreInfoView: View {
     private func temperatureControls(target: Double) -> some View {
         HStack(spacing: 10) {
             Button {
-                if let next = model.nextTemperature(delta: -model.targetTemperatureStep) {
-                    send(model.setTemperatureCall(next))
-                }
+                adjustTemperature(delta: -model.targetTemperatureStep)
             } label: {
                 Image(systemName: "minus")
                     .frame(width: 28, height: 28)
             }
             .buttonStyle(.bordered)
-            .disabled(model.isUnavailable || isSending)
+            .disabled(model.isUnavailable)
 
-            Text(model.targetTemperatureDisplay ?? HANumberFormatting.format(target))
+            let displayValue = localTarget != nil
+                ? HANumberFormatting.format(currentTarget)
+                : (model.targetTemperatureDisplay ?? HANumberFormatting.format(currentTarget))
+
+            Text(displayValue)
                 .font(.title3.monospacedDigit())
                 .frame(maxWidth: .infinity)
 
             Button {
-                if let next = model.nextTemperature(delta: model.targetTemperatureStep) {
-                    send(model.setTemperatureCall(next))
-                }
+                adjustTemperature(delta: model.targetTemperatureStep)
             } label: {
                 Image(systemName: "plus")
                     .frame(width: 28, height: 28)
             }
             .buttonStyle(.bordered)
-            .disabled(model.isUnavailable || isSending)
+            .disabled(model.isUnavailable)
+        }
+    }
+
+    private func adjustTemperature(delta: Double) {
+        let base = localTarget ?? model.targetTemperature ?? 0
+        let next = model.steppedTemperature(base + delta)
+        localTarget = next
+        
+        debounceTask?.cancel()
+        debounceTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: 750_000_000)
+                guard !Task.isCancelled else { return }
+                
+                if let call = model.setTemperatureCall(next) {
+                    await send(call)
+                }
+                
+                localTarget = nil
+            } catch {
+                // Task cancelled
+            }
         }
     }
 

@@ -281,7 +281,7 @@ extension HAJSONValue {
         return value
     }
 
-    var haNumberValue: Double? {
+    public var haNumberValue: Double? {
         switch self {
         case let .integer(value):
             return Double(value)
@@ -294,7 +294,7 @@ extension HAJSONValue {
         }
     }
 
-    var haScalarStringValue: String? {
+    public var haScalarStringValue: String? {
         switch self {
         case let .string(value):
             return value

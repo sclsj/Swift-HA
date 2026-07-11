@@ -162,6 +162,26 @@ struct EntityRowView: View {
             return displayContext.stateContentDisplay("last_changed", for: stateObj)
         case "last-updated":
             return displayContext.stateContentDisplay("last_updated", for: stateObj)
+        case "last-triggered":
+            return displayContext.stateContentDisplay("last_triggered", for: stateObj)
+        case "position":
+            if let pos = stateObj.attributes["current_position"]?.haNumberValue {
+                return "Position: \(Int(pos))"
+            }
+            return nil
+        case "tilt-position":
+            if let tilt = stateObj.attributes["current_tilt_position"]?.haNumberValue {
+                return "Tilt position: \(Int(tilt))"
+            }
+            return nil
+        case "brightness":
+            if let brightness = stateObj.attributes["brightness"]?.haNumberValue {
+                let percent = Int(round((brightness / 255.0) * 100.0))
+                return "\(percent) %"
+            }
+            return nil
+        case "state":
+            return displayContext.stateDisplay(for: stateObj)
         default:
             return nil
         }
