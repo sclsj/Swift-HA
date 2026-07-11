@@ -31,7 +31,7 @@ public enum StatisticsSeriesBuilder {
         var seriesToEntityIndex: [Int] = []
         let orderedIDs = orderedStatisticIDs(statisticIDs, statistics: statistics)
         let requestedStatTypes = normalizedStatTypes(requestedStatTypes)
-        let unit = explicitUnit ?? inferredUnit(for: orderedIDs, metadata: metadata)
+        let unit = explicitUnit ?? inferredUnit(for: orderedIDs, metadata: metadata, currentStates: currentStates)
 
         for (entityIndex, statisticID) in orderedIDs.enumerated() {
             guard let values = statistics[statisticID], !values.isEmpty else {
@@ -68,6 +68,10 @@ public enum StatisticsSeriesBuilder {
 
             for value in values {
                 guard value.start.isFinite, value.end.isFinite else {
+                    continue
+                }
+                let limit = endTime.map { min($0, value.end) } ?? value.end
+                if value.start > limit {
                     continue
                 }
                 if previousStart == value.start {
@@ -109,7 +113,8 @@ public enum StatisticsSeriesBuilder {
                 metadata: metadata[statisticID],
                 unit: unit,
                 accumulatorEndTime: accumulator.lastEndTime,
-                now: now
+                now: now,
+                currentState: currentStates[statisticID]
             ), let now = now,
                let currentValue = currentStates[statisticID].flatMap({ finite(Double($0.state)) }) {
                 for (index, type) in availableTypes.enumerated() where type != .sum && type != .change {
@@ -200,11 +205,13 @@ public enum StatisticsSeriesBuilder {
 
     private static func inferredUnit(
         for statisticIDs: [String],
-        metadata: [String: StatisticsMetaData]
+        metadata: [String: StatisticsMetaData],
+        currentStates: [EntityID: HassEntity]
     ) -> String? {
         var inferred: String?
         for id in statisticIDs {
-            let unit = metadata[id]?.statisticsUnitOfMeasurement
+            let stateUnit = currentStates[id]?.attributes["unit_of_measurement"]?.stringValue
+            let unit = stateUnit ?? metadata[id]?.statisticsUnitOfMeasurement
             if inferred == nil {
                 inferred = unit
             } else if inferred != unit {
@@ -263,7 +270,8 @@ public enum StatisticsSeriesBuilder {
         metadata: StatisticsMetaData?,
         unit: String?,
         accumulatorEndTime: Double?,
-        now: Double?
+        now: Double?,
+        currentState: HassEntity?
     ) -> Bool {
         guard !chartType.isStacked,
               !isExternalStatistic(statisticID),
@@ -273,7 +281,8 @@ public enum StatisticsSeriesBuilder {
             return false
         }
 
-        let statisticUnit = metadata?.statisticsUnitOfMeasurement
+        let stateUnit = currentState?.attributes["unit_of_measurement"]?.stringValue
+        let statisticUnit = stateUnit ?? metadata?.statisticsUnitOfMeasurement
         return unit == nil || statisticUnit == nil || unit == statisticUnit
     }
 

@@ -78,8 +78,14 @@ struct EntityRowView: View {
         .onHover { hovering in
             isHovering = hovering
         }
-        .onTapGesture {
-            performTap(model: model, stateObj: stateObj)
+        .onTapGesture(count: 2) {
+            performTap(model: model, stateObj: stateObj, gesture: .doubleTap)
+        }
+        .onTapGesture(count: 1) {
+            performTap(model: model, stateObj: stateObj, gesture: .tap)
+        }
+        .onLongPressGesture {
+            performTap(model: model, stateObj: stateObj, gesture: .hold)
         }
     }
 
@@ -129,7 +135,7 @@ struct EntityRowView: View {
             .truncationMode(.tail)
     }
 
-    private func performTap(model: EntityRowModel, stateObj: HassEntity) {
+    private func performTap(model: EntityRowModel, stateObj: HassEntity, gesture: LovelaceActionGesture) {
         CardActionDispatcher(
             entityID: stateObj.entityID,
             states: displayContext.states,
@@ -137,6 +143,7 @@ struct EntityRowView: View {
             onServiceCall: onServiceCall
         )
         .perform(
+            gesture: gesture,
             tapAction: model.tapAction,
             holdAction: model.holdAction,
             doubleTapAction: model.doubleTapAction

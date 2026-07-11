@@ -227,6 +227,9 @@ private struct ClimateMoreInfoView: View {
                 MoreInfoFieldRow(label: "Current humidity", value: currentHumidity)
             }
             MoreInfoFieldRow(label: "HVAC mode", value: model.hvacMode)
+            if let hvacAction = model.hvacAction {
+                MoreInfoFieldRow(label: "Action", value: hvacAction)
+            }
         }
     }
 
@@ -299,6 +302,16 @@ private struct ClimateMoreInfoView: View {
                     options: model.swingModes,
                     disabled: model.isUnavailable || isSending,
                     callForOption: model.setSwingModeCall,
+                    onSelect: send
+                )
+            }
+            if !model.swingHorizontalModes.isEmpty {
+                ClimateModeMenu(
+                    title: "Horizontal swing",
+                    current: model.swingHorizontalMode,
+                    options: model.swingHorizontalModes,
+                    disabled: model.isUnavailable || isSending,
+                    callForOption: model.setSwingHorizontalModeCall,
                     onSelect: send
                 )
             }

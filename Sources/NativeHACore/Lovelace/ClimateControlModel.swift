@@ -29,6 +29,9 @@ public struct ClimateControlModel: Equatable {
     public var fanModes: [String]
     public var swingMode: String?
     public var swingModes: [String]
+    public var swingHorizontalMode: String?
+    public var swingHorizontalModes: [String]
+    public var hvacAction: String?
     public var targetTemperature: Double?
     public var minTemperature: Double?
     public var maxTemperature: Double?
@@ -87,6 +90,13 @@ public struct ClimateControlModel: Equatable {
             stateObj: stateObj,
             feature: .swingMode
         )
+        swingHorizontalMode = stateObj.attributes["swing_horizontal_mode"]?.haScalarStringValue
+        swingHorizontalModes = Self.optionArray(
+            stateObj.attributes["swing_horizontal_modes"],
+            stateObj: stateObj,
+            feature: .swingHorizontalMode
+        )
+        hvacAction = stateObj.attributes["hvac_action"]?.haScalarStringValue
         targetTemperature = Self.finiteNumber(stateObj.attributes["temperature"])
         minTemperature = Self.finiteNumber(stateObj.attributes["min_temp"])
         maxTemperature = Self.finiteNumber(stateObj.attributes["max_temp"])
@@ -191,6 +201,16 @@ public struct ClimateControlModel: Equatable {
             options: swingModes,
             service: "set_swing_mode",
             field: "swing_mode"
+        )
+    }
+
+    public func setSwingHorizontalModeCall(_ mode: String) -> HAServiceCall? {
+        modeCall(
+            current: swingHorizontalMode,
+            selected: mode,
+            options: swingHorizontalModes,
+            service: "set_swing_horizontal_mode",
+            field: "swing_horizontal_mode"
         )
     }
 

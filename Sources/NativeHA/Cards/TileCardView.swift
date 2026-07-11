@@ -50,29 +50,29 @@ struct TileCardView: View {
             .frame(minHeight: HAStyleTokens.tileMinimumHeight)
         }
         .contentShape(Rectangle())
-        .onTapGesture {
-            performCardTap(stateObj)
+        .onTapGesture(count: 2) {
+            performCardTap(stateObj, gesture: .doubleTap)
+        }
+        .onTapGesture(count: 1) {
+            performCardTap(stateObj, gesture: .tap)
+        }
+        .onLongPressGesture {
+            performCardTap(stateObj, gesture: .hold)
         }
     }
 
     @ViewBuilder
     private func iconContent(_ stateObj: HassEntity) -> some View {
-        let action = Self.resolveIconTapAction(
-            config: config,
-            entityID: stateObj.entityID,
-            states: displayContext.states
-        )
-
-        if Self.isActionable(action) {
-            Button {
-                performIconAction(action)
-            } label: {
-                tileIcon(stateObj)
+        tileIcon(stateObj)
+            .onTapGesture(count: 2) {
+                performIconGesture(stateObj, gesture: .doubleTap)
             }
-            .buttonStyle(.plain)
-        } else {
-            tileIcon(stateObj)
-        }
+            .onTapGesture(count: 1) {
+                performIconGesture(stateObj, gesture: .tap)
+            }
+            .onLongPressGesture {
+                performIconGesture(stateObj, gesture: .hold)
+            }
     }
 
     private func tileIcon(_ stateObj: HassEntity) -> some View {
@@ -131,7 +131,7 @@ struct TileCardView: View {
         return displayContext.stateDisplay(for: stateObj)
     }
 
-    private func performCardTap(_ stateObj: HassEntity) {
+    private func performCardTap(_ stateObj: HassEntity, gesture: LovelaceActionGesture) {
         CardActionDispatcher(
             entityID: stateObj.entityID,
             states: displayContext.states,
@@ -139,20 +139,26 @@ struct TileCardView: View {
             onServiceCall: onServiceCall
         )
         .perform(
+            gesture: gesture,
             tapAction: config.tapAction,
             holdAction: config.holdAction,
             doubleTapAction: config.doubleTapAction
         )
     }
 
-    private func performIconAction(_ action: LovelaceResolvedAction) {
+    private func performIconGesture(_ stateObj: HassEntity, gesture: LovelaceActionGesture) {
         CardActionDispatcher(
-            entityID: config.entity,
+            entityID: stateObj.entityID,
             states: displayContext.states,
             onMoreInfo: onMoreInfo,
             onServiceCall: onServiceCall
         )
-        .perform(action)
+        .perform(
+            gesture: gesture,
+            tapAction: config.iconTapAction,
+            holdAction: config.iconHoldAction,
+            doubleTapAction: config.iconDoubleTapAction
+        )
     }
 
     static func resolveIconTapAction(

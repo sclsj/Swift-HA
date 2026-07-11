@@ -163,6 +163,7 @@ private enum SettingsPageCatalog {
                 id: "primary",
                 title: "Home Assistant",
                 items: visible([
+                    companionAppPage,
                     cloudPage,
                     devicesPage,
                     automationsPage,
@@ -250,6 +251,18 @@ private enum SettingsPageCatalog {
             || context.entityRegistryEntries.keys.contains { $0.hasPrefix(prefix) }
     }
 
+
+    private static let companionAppPage = SettingsPageDefinition(
+        id: "companion_app",
+        title: "Companion App",
+        subtitle: "App settings and configuration",
+        path: "#external-app-configuration",
+        iconSystemName: "iphone",
+        colorHex: "#8E24AA",
+        core: true,
+        adminOnly: false,
+        externalOnly: true
+    )
 
     private static let cloudPage = SettingsPageDefinition(
         id: "cloud",
