@@ -189,6 +189,48 @@ final class ClimateControlModelTests: XCTestCase {
         XCTAssertNil(model.setPresetModeCall("missing"), "Unknown options should not produce service calls.")
     }
 
+    func testClimateTemperatureStepAndPartialBoundsUseConfig() throws {
+        let maxOnly = entity(
+            "climate.partial_bounds",
+            state: "heat",
+            attributes: [
+                "supported_features": .integer(1),
+                "temperature": .integer(70),
+                "max_temp": .integer(72)
+            ]
+        )
+        let maxOnlyModel = try XCTUnwrap(ClimateControlModel(
+            stateObj: maxOnly,
+            config: config(temperatureUnit: "F")
+        ))
+
+        XCTAssertEqual(maxOnlyModel.targetTemperatureStep, 1)
+        XCTAssertEqual(maxOnlyModel.steppedTemperature(75), 72)
+        XCTAssertEqual(
+            maxOnlyModel.setTemperatureCall(75)?.serviceData["temperature"],
+            .double(72)
+        )
+
+        let minOnly = entity(
+            "climate.partial_bounds",
+            state: "heat",
+            attributes: [
+                "supported_features": .integer(1),
+                "temperature": .integer(18),
+                "min_temp": .integer(16),
+                "target_temp_step": .double(0.5)
+            ]
+        )
+        let minOnlyModel = try XCTUnwrap(ClimateControlModel(stateObj: minOnly))
+
+        XCTAssertEqual(minOnlyModel.targetTemperatureStep, 0.5)
+        XCTAssertEqual(minOnlyModel.steppedTemperature(10), 16)
+        XCTAssertEqual(
+            minOnlyModel.setTemperatureCall(10)?.serviceData["temperature"],
+            .double(16)
+        )
+    }
+
     func testClimateMissingAttributesDoNotCrash() throws {
         let sparse = entity("climate.sparse", state: "off", attributes: [:])
         let model = try XCTUnwrap(ClimateControlModel(stateObj: sparse))
@@ -200,9 +242,47 @@ final class ClimateControlModelTests: XCTestCase {
         XCTAssertNil(model.nextTemperature(delta: 1))
     }
 
+    func testMalformedClimateAttributesDoNotCrash() throws {
+        let malformed = entity(
+            "climate.malformed",
+            state: "cool",
+            attributes: [
+                "supported_features": .string("not-a-number"),
+                "hvac_modes": .string("cool"),
+                "temperature": .string("not-a-number"),
+                "min_temp": .string("NaN"),
+                "target_temp_step": .string("not-a-number"),
+                "preset_modes": .array([.string("eco")]),
+                "fan_modes": .array([.string("auto")]),
+                "swing_modes": .array([.string("vertical")])
+            ]
+        )
+        let model = try XCTUnwrap(ClimateControlModel(stateObj: malformed))
+
+        XCTAssertTrue(model.hvacModes.isEmpty)
+        XCTAssertNil(model.targetTemperature)
+        XCTAssertEqual(model.targetTemperatureStep, 0.5)
+        XCTAssertTrue(model.presetModes.isEmpty)
+        XCTAssertTrue(model.fanModes.isEmpty)
+        XCTAssertTrue(model.swingModes.isEmpty)
+        XCTAssertEqual(model.steppedTemperature(22.2), 22)
+    }
+
     func testUnavailableClimateSafelyNoOpsControls() throws {
         let unavailable = climateEntity(state: HAStateValue.unavailable)
         let model = try XCTUnwrap(ClimateControlModel(stateObj: unavailable))
+
+        XCTAssertTrue(model.isUnavailable)
+        XCTAssertNil(model.setTemperatureCall(25))
+        XCTAssertNil(model.setHVACModeCall("cool"))
+        XCTAssertNil(model.setPresetModeCall("boost"))
+        XCTAssertNil(model.setFanModeCall("high"))
+        XCTAssertNil(model.setSwingModeCall("both"))
+    }
+
+    func testUnknownClimateSafelyNoOpsControls() throws {
+        let unknown = climateEntity(state: HAStateValue.unknown)
+        let model = try XCTUnwrap(ClimateControlModel(stateObj: unknown))
 
         XCTAssertTrue(model.isUnavailable)
         XCTAssertNil(model.setTemperatureCall(25))
@@ -393,5 +473,28 @@ private func entity(
         lastChanged: date,
         lastUpdated: date,
         context: HAContext(id: "module12-test")
+    )
+}
+
+private func config(temperatureUnit: String = "°C") -> HAConfig {
+    HAConfig(
+        latitude: 0,
+        longitude: 0,
+        elevation: 0,
+        locationName: "Home",
+        timeZone: "UTC",
+        unitSystem: ["temperature": temperatureUnit],
+        version: "test",
+        components: ["climate"],
+        configDir: nil,
+        configSource: nil,
+        country: nil,
+        currency: nil,
+        language: "en",
+        internalURL: nil,
+        externalURL: nil,
+        safeMode: false,
+        recoveryMode: nil,
+        state: nil
     )
 }

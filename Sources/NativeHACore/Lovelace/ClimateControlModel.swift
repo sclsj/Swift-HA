@@ -51,7 +51,7 @@ public struct ClimateControlModel: Equatable {
             registryEntry: registryEntry,
             config: config
         )
-        isUnavailable = stateObj.state == HAStateValue.unavailable
+        isUnavailable = HAStateValue.isUnknownOrUnavailable(stateObj.state)
         currentTemperatureDisplay = Self.displayIfPresent(
             stateObj,
             attribute: "current_temperature",
@@ -87,9 +87,9 @@ public struct ClimateControlModel: Equatable {
             stateObj: stateObj,
             feature: .swingMode
         )
-        targetTemperature = stateObj.attributes["temperature"]?.haNumberValue
-        minTemperature = stateObj.attributes["min_temp"]?.haNumberValue
-        maxTemperature = stateObj.attributes["max_temp"]?.haNumberValue
+        targetTemperature = Self.finiteNumber(stateObj.attributes["temperature"])
+        minTemperature = Self.finiteNumber(stateObj.attributes["min_temp"])
+        maxTemperature = Self.finiteNumber(stateObj.attributes["max_temp"])
         targetTemperatureStep = Self.temperatureStep(stateObj: stateObj, config: config)
         supportsTargetTemperature = Self.supports(.targetTemperature, stateObj: stateObj)
             || targetTemperature != nil
@@ -114,16 +114,33 @@ public struct ClimateControlModel: Equatable {
     }
 
     public func steppedTemperature(_ value: Double) -> Double {
-        let min = minTemperature ?? value
-        let max = maxTemperature ?? value
-        let clamped = Swift.max(min, Swift.min(max, value))
+        guard value.isFinite else {
+            return targetTemperature ?? minTemperature ?? maxTemperature ?? 0
+        }
+
+        let bounds = normalizedTemperatureBounds()
+        var clamped = value
+        if let min = bounds.min {
+            clamped = Swift.max(min, clamped)
+        }
+        if let max = bounds.max {
+            clamped = Swift.min(max, clamped)
+        }
+
         let step = targetTemperatureStep > 0 ? targetTemperatureStep : 0.5
-        let stepped = ((clamped - min) / step).rounded() * step + min
-        return Swift.max(min, Swift.min(max, stepped))
+        let anchor = bounds.min ?? 0
+        var stepped = ((clamped - anchor) / step).rounded() * step + anchor
+        if let min = bounds.min {
+            stepped = Swift.max(min, stepped)
+        }
+        if let max = bounds.max {
+            stepped = Swift.min(max, stepped)
+        }
+        return stepped
     }
 
     public func setTemperatureCall(_ temperature: Double) -> HAServiceCall? {
-        guard !isUnavailable else {
+        guard !isUnavailable, temperature.isFinite else {
             return nil
         }
 
@@ -249,20 +266,36 @@ public struct ClimateControlModel: Equatable {
     }
 
     private static func supports(_ feature: HAClimateFeature, stateObj: HassEntity) -> Bool {
-        guard let value = stateObj.attributes["supported_features"]?.haNumberValue else {
+        guard let value = finiteNumber(stateObj.attributes["supported_features"]) else {
             return false
         }
         return Int(value) & feature.rawValue != 0
     }
 
     private static func temperatureStep(stateObj: HassEntity, config: HAConfig?) -> Double {
-        if let step = stateObj.attributes["target_temp_step"]?.haNumberValue, step > 0 {
+        if let step = finiteNumber(stateObj.attributes["target_temp_step"]), step > 0 {
             return step
         }
 
         let unit = config?.unitSystem["temperature"]
             ?? stateObj.attributes["temperature_unit"]?.stringValue
         return unit == "°F" || unit == "F" ? 1 : 0.5
+    }
+
+    private func normalizedTemperatureBounds() -> (min: Double?, max: Double?) {
+        if let minTemperature = minTemperature,
+           let maxTemperature = maxTemperature,
+           minTemperature > maxTemperature {
+            return (nil, nil)
+        }
+        return (minTemperature, maxTemperature)
+    }
+
+    private static func finiteNumber(_ value: HAJSONValue?) -> Double? {
+        guard let number = value?.haNumberValue, number.isFinite else {
+            return nil
+        }
+        return number
     }
 
     private static let hvacModeOrder: [String: Int] = [
