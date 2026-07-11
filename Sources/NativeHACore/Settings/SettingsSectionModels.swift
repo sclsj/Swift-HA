@@ -227,7 +227,7 @@ private enum SettingsPageCatalog {
             return false
         }
         if page.id == "bluetooth" {
-            return context.hasBluetoothConfigEntries ?? bluetoothEvidenceExists(context)
+            return context.hasBluetoothConfigEntries ?? false
         }
 
         let componentVisible = page.core
@@ -250,17 +250,6 @@ private enum SettingsPageCatalog {
             || context.entityRegistryEntries.keys.contains { $0.hasPrefix(prefix) }
     }
 
-    private static func bluetoothEvidenceExists(_ context: SettingsDashboardContext) -> Bool {
-        guard isComponentLoaded("bluetooth", context: context) else {
-            return false
-        }
-        return context.entityRegistryEntries.values.contains { $0.platform == "bluetooth" }
-            || context.registryEntries.values.contains { $0.platform == "bluetooth" }
-            || context.devices.values.contains { device in
-                device.identifiers.contains { $0.contains("bluetooth") }
-                    || device.connections.contains { $0.contains("bluetooth") }
-            }
-    }
 
     private static let cloudPage = SettingsPageDefinition(
         id: "cloud",

@@ -112,21 +112,26 @@ public struct LovelaceRouter: Equatable {
             return nil
         }
 
+        let isRequestedPathPresent = requestedViewPath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        let hasExplicitRequest = isRequestedPathPresent || requestedViewIndex != nil
+
         if let requestedViewPath = requestedViewPath?.trimmingCharacters(in: .whitespacesAndNewlines),
            !requestedViewPath.isEmpty {
             let requestedIndex = Int(requestedViewPath)
             for index in views.indices {
-                if (views[index].path == requestedViewPath || index == requestedIndex),
-                   isVisible(views[index], userID: userID) {
+                if views[index].path == requestedViewPath || index == requestedIndex {
                     return index
                 }
             }
         }
 
         if let requestedViewIndex = requestedViewIndex,
-           views.indices.contains(requestedViewIndex),
-           isVisible(views[requestedViewIndex], userID: userID) {
+           views.indices.contains(requestedViewIndex) {
             return requestedViewIndex
+        }
+
+        if hasExplicitRequest {
+            return 0
         }
 
         return views.indices.first { isVisible(views[$0], userID: userID) }

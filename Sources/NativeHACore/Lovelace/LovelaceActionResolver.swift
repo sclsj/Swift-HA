@@ -168,13 +168,20 @@ public enum LovelaceActionResolver {
     private static func isToggleableDomain(_ domain: String) -> Bool {
         [
             "automation",
+            "climate",
+            "cover",
             "fan",
             "group",
             "humidifier",
             "input_boolean",
             "light",
+            "lock",
+            "media_player",
+            "scene",
             "switch",
-            "valve"
+            "vacuum",
+            "valve",
+            "water_heater"
         ].contains(domain)
     }
 }

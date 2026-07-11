@@ -34,20 +34,26 @@ public struct LovelaceViewConfig: Decodable, Equatable {
     public var raw: HAJSONValue
 
     public var layout: LovelaceViewLayout {
+        if let type = type {
+            switch type {
+            case "masonry": return .masonry
+            case "sections": return .sections
+            case "sidebar": return .sidebar
+            case "panel": return .panel
+            default: return .custom(type)
+            }
+        }
+
         if panel == true {
             return .panel
         }
 
-        if type == "sections" || !sections.isEmpty {
+        if !sections.isEmpty {
             return .sections
         }
 
-        if type == "sidebar" || sidebar != nil {
-            return .sidebar
-        }
-
-        if let type = type, type != "masonry" {
-            return .custom(type)
+        if cards.isEmpty && badges.isEmpty {
+            return .sections
         }
 
         return .masonry

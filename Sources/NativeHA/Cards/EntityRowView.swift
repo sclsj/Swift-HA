@@ -193,7 +193,7 @@ struct EntityRowView: View {
         switch domain {
         case "button":
             return .button
-        case "fan", "switch":
+        case "automation", "fan", "humidifier", "input_boolean", "light", "script", "switch":
             return .toggle
         case "sensor":
             return .sensor
