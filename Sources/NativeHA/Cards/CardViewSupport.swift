@@ -90,6 +90,8 @@ struct CardActionDispatcher {
     var currentUser: HAUser? = nil
     var onMoreInfo: (EntityID) -> Void
     var onServiceCall: (HAServiceCall) -> Void
+    var onNavigate: (String, Bool) -> Void = { _, _ in }
+    var onOpenURL: (String) -> Void = { _ in }
 
     func perform(
         gesture: LovelaceActionGesture = .tap,
@@ -108,11 +110,32 @@ struct CardActionDispatcher {
     }
 
     func perform(_ action: LovelaceResolvedAction) {
+        LovelaceActionExecutor(
+            onMoreInfo: onMoreInfo,
+            onServiceCall: onServiceCall,
+            onNavigate: onNavigate,
+            onOpenURL: onOpenURL
+        )
+        .perform(action)
+    }
+}
+
+struct LovelaceActionExecutor {
+    var onMoreInfo: (EntityID) -> Void = { _ in }
+    var onServiceCall: (HAServiceCall) -> Void = { _ in }
+    var onNavigate: (String, Bool) -> Void = { _, _ in }
+    var onOpenURL: (String) -> Void = { _ in }
+
+    func perform(_ action: LovelaceResolvedAction) {
         switch action {
         case let .moreInfo(entityID):
             onMoreInfo(entityID)
         case let .callService(call):
             onServiceCall(call)
+        case let .navigate(path, replace):
+            onNavigate(path, replace)
+        case let .openURL(url):
+            onOpenURL(url)
         case let .confirmation(config, thenAction):
             NotificationCenter.default.post(
                 name: .lovelaceActionRequiresConfirmation,
@@ -122,7 +145,7 @@ struct CardActionDispatcher {
                     "action": thenAction
                 ]
             )
-        default:
+        case .assist, .fireDOMEvent, .none, .unsupported:
             break
         }
     }

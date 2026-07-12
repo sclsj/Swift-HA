@@ -9,6 +9,8 @@ struct CardHostView: View {
     let userName: String
     let onMoreInfo: (EntityID) -> Void
     let onServiceCall: (HAServiceCall) -> Void
+    let onNavigate: (String, Bool) -> Void
+    let onOpenURL: (String) -> Void
 
     private let factory = LovelaceElementFactory()
 
@@ -19,7 +21,9 @@ struct CardHostView: View {
         templateSubscriber: MarkdownTemplateSubscribing? = nil,
         userName: String = "Home Assistant",
         onMoreInfo: @escaping (EntityID) -> Void = { _ in },
-        onServiceCall: @escaping (HAServiceCall) -> Void = { _ in }
+        onServiceCall: @escaping (HAServiceCall) -> Void = { _ in },
+        onNavigate: @escaping (String, Bool) -> Void = { _, _ in },
+        onOpenURL: @escaping (String) -> Void = { _ in }
     ) {
         self.card = card
         self.displayContext = EntityDisplayContext(states: states)
@@ -28,6 +32,8 @@ struct CardHostView: View {
         self.userName = userName
         self.onMoreInfo = onMoreInfo
         self.onServiceCall = onServiceCall
+        self.onNavigate = onNavigate
+        self.onOpenURL = onOpenURL
     }
 
     init(
@@ -37,7 +43,9 @@ struct CardHostView: View {
         templateSubscriber: MarkdownTemplateSubscribing? = nil,
         userName: String = "Home Assistant",
         onMoreInfo: @escaping (EntityID) -> Void = { _ in },
-        onServiceCall: @escaping (HAServiceCall) -> Void = { _ in }
+        onServiceCall: @escaping (HAServiceCall) -> Void = { _ in },
+        onNavigate: @escaping (String, Bool) -> Void = { _, _ in },
+        onOpenURL: @escaping (String) -> Void = { _ in }
     ) {
         self.card = card
         self.displayContext = displayContext
@@ -46,6 +54,8 @@ struct CardHostView: View {
         self.userName = userName
         self.onMoreInfo = onMoreInfo
         self.onServiceCall = onServiceCall
+        self.onNavigate = onNavigate
+        self.onOpenURL = onOpenURL
     }
 
     @ViewBuilder
@@ -58,7 +68,9 @@ struct CardHostView: View {
                 templateSubscriber: templateSubscriber,
                 userName: userName,
                 onMoreInfo: onMoreInfo,
-                onServiceCall: onServiceCall
+                onServiceCall: onServiceCall,
+                onNavigate: onNavigate,
+                onOpenURL: onOpenURL
             )
         }
     }

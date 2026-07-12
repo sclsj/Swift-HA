@@ -9,6 +9,8 @@ struct PanelLayoutView: View {
     var userName: String = "Home Assistant"
     var onMoreInfo: (EntityID) -> Void = { _ in }
     var onServiceCall: (HAServiceCall) -> Void = { _ in }
+    var onNavigate: (String, Bool) -> Void = { _, _ in }
+    var onOpenURL: (String) -> Void = { _ in }
 
     var body: some View {
         switch layout {
@@ -41,7 +43,9 @@ struct PanelLayoutView: View {
                     templateSubscriber: templateSubscriber,
                     userName: userName,
                     onMoreInfo: onMoreInfo,
-                    onServiceCall: onServiceCall
+                    onServiceCall: onServiceCall,
+                    onNavigate: onNavigate,
+                    onOpenURL: onOpenURL
                 )
                     .frame(maxWidth: .infinity, alignment: .top)
             } else {
@@ -95,7 +99,9 @@ struct PanelLayoutView: View {
                         templateSubscriber: templateSubscriber,
                         userName: userName,
                         onMoreInfo: onMoreInfo,
-                        onServiceCall: onServiceCall
+                        onServiceCall: onServiceCall,
+                        onNavigate: onNavigate,
+                        onOpenURL: onOpenURL
                     )
                 }
             }

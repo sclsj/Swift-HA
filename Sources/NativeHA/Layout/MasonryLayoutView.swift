@@ -8,6 +8,8 @@ struct MasonryLayoutView: View {
     var userName: String = "Home Assistant"
     var onMoreInfo: (EntityID) -> Void = { _ in }
     var onServiceCall: (HAServiceCall) -> Void = { _ in }
+    var onNavigate: (String, Bool) -> Void = { _, _ in }
+    var onOpenURL: (String) -> Void = { _ in }
 
     var body: some View {
         LayoutWidthReader { width in
@@ -43,7 +45,9 @@ struct MasonryLayoutView: View {
                                 templateSubscriber: templateSubscriber,
                                 userName: userName,
                                 onMoreInfo: onMoreInfo,
-                                onServiceCall: onServiceCall
+                                onServiceCall: onServiceCall,
+                                onNavigate: onNavigate,
+                                onOpenURL: onOpenURL
                             )
                         }
                     }

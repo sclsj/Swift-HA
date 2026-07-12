@@ -14,6 +14,8 @@ struct LovelaceRootView: View {
     let onRetry: () -> Void
     var onMoreInfo: (EntityID) -> Void = { _ in }
     var onServiceCall: (HAServiceCall) -> Void = { _ in }
+    var onNavigate: (String, Bool) -> Void = { _, _ in }
+    var onOpenURL: (String) -> Void = { _ in }
 
     @State private var showConfirmationAlert = false
     @State private var pendingConfirmationConfig: LovelaceConfirmationRestrictionConfig?
@@ -41,7 +43,9 @@ struct LovelaceRootView: View {
                     onSelectView: onSelectView,
                     onRetry: onRetry,
                     onMoreInfo: onMoreInfo,
-                    onServiceCall: onServiceCall
+                    onServiceCall: onServiceCall,
+                    onNavigate: onNavigate,
+                    onOpenURL: onOpenURL
                 )
             }
         }
@@ -71,14 +75,16 @@ struct LovelaceRootView: View {
     }
 
     private func performResolvedAction(_ action: LovelaceResolvedAction) {
-        switch action {
-        case let .moreInfo(entityID):
-            onMoreInfo(entityID)
-        case let .callService(call):
-            onServiceCall(call)
-        default:
-            break
-        }
+        actionExecutor.perform(action)
+    }
+
+    private var actionExecutor: LovelaceActionExecutor {
+        LovelaceActionExecutor(
+            onMoreInfo: onMoreInfo,
+            onServiceCall: onServiceCall,
+            onNavigate: onNavigate,
+            onOpenURL: onOpenURL
+        )
     }
 
     private var dashboardList: some View {

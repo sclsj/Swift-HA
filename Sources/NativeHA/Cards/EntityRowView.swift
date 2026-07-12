@@ -14,6 +14,8 @@ struct EntityRowView: View {
     var inheritedStateColor: Bool?
     var onMoreInfo: (EntityID) -> Void = { _ in }
     var onServiceCall: (HAServiceCall) -> Void = { _ in }
+    var onNavigate: (String, Bool) -> Void = { _, _ in }
+    var onOpenURL: (String) -> Void = { _ in }
 
     @State private var isHovering = false
 
@@ -140,7 +142,9 @@ struct EntityRowView: View {
             entityID: stateObj.entityID,
             states: displayContext.states,
             onMoreInfo: onMoreInfo,
-            onServiceCall: onServiceCall
+            onServiceCall: onServiceCall,
+            onNavigate: onNavigate,
+            onOpenURL: onOpenURL
         )
         .perform(
             gesture: gesture,

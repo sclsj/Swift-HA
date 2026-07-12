@@ -6,6 +6,8 @@ struct EntitiesCardView: View {
     let displayContext: EntityDisplayContext
     var onMoreInfo: (EntityID) -> Void = { _ in }
     var onServiceCall: (HAServiceCall) -> Void = { _ in }
+    var onNavigate: (String, Bool) -> Void = { _, _ in }
+    var onOpenURL: (String) -> Void = { _ in }
 
     var body: some View {
         CardChrome {
@@ -21,7 +23,9 @@ struct EntitiesCardView: View {
                             displayContext: displayContext,
                             inheritedStateColor: config.stateColor,
                             onMoreInfo: onMoreInfo,
-                            onServiceCall: onServiceCall
+                            onServiceCall: onServiceCall,
+                            onNavigate: onNavigate,
+                            onOpenURL: onOpenURL
                         )
                     }
                 }

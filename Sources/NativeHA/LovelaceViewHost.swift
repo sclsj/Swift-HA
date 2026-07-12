@@ -11,6 +11,8 @@ struct LovelaceViewHost: View {
     let onRetry: () -> Void
     var onMoreInfo: (EntityID) -> Void = { _ in }
     var onServiceCall: (HAServiceCall) -> Void = { _ in }
+    var onNavigate: (String, Bool) -> Void = { _, _ in }
+    var onOpenURL: (String) -> Void = { _ in }
 
     private let router = LovelaceRouter()
 
@@ -127,7 +129,9 @@ struct LovelaceViewHost: View {
                     templateSubscriber: templateSubscriber,
                     userName: userName,
                     onMoreInfo: onMoreInfo,
-                    onServiceCall: onServiceCall
+                    onServiceCall: onServiceCall,
+                    onNavigate: onNavigate,
+                    onOpenURL: onOpenURL
                 )
             case .sections:
                 SectionsLayoutView(
@@ -136,7 +140,9 @@ struct LovelaceViewHost: View {
                     templateSubscriber: templateSubscriber,
                     userName: userName,
                     onMoreInfo: onMoreInfo,
-                    onServiceCall: onServiceCall
+                    onServiceCall: onServiceCall,
+                    onNavigate: onNavigate,
+                    onOpenURL: onOpenURL
                 )
             case .panel:
                 PanelLayoutView(
@@ -146,7 +152,9 @@ struct LovelaceViewHost: View {
                     templateSubscriber: templateSubscriber,
                     userName: userName,
                     onMoreInfo: onMoreInfo,
-                    onServiceCall: onServiceCall
+                    onServiceCall: onServiceCall,
+                    onNavigate: onNavigate,
+                    onOpenURL: onOpenURL
                 )
             case .sidebar:
                 PanelLayoutView(
@@ -156,7 +164,9 @@ struct LovelaceViewHost: View {
                     templateSubscriber: templateSubscriber,
                     userName: userName,
                     onMoreInfo: onMoreInfo,
-                    onServiceCall: onServiceCall
+                    onServiceCall: onServiceCall,
+                    onNavigate: onNavigate,
+                    onOpenURL: onOpenURL
                 )
             case let .custom(type):
                 VStack(alignment: .leading, spacing: 12) {
@@ -171,7 +181,9 @@ struct LovelaceViewHost: View {
                         templateSubscriber: templateSubscriber,
                         userName: userName,
                         onMoreInfo: onMoreInfo,
-                        onServiceCall: onServiceCall
+                        onServiceCall: onServiceCall,
+                        onNavigate: onNavigate,
+                        onOpenURL: onOpenURL
                     )
                 }
             }
@@ -190,7 +202,9 @@ struct LovelaceViewHost: View {
                             badge: badge,
                             displayContext: displayContext,
                             onMoreInfo: onMoreInfo,
-                            onServiceCall: onServiceCall
+                            onServiceCall: onServiceCall,
+                            onNavigate: onNavigate,
+                            onOpenURL: onOpenURL
                         )
                     }
                 }

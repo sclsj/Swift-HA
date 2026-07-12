@@ -199,7 +199,9 @@ struct LovelaceElementFactory {
         templateSubscriber: MarkdownTemplateSubscribing?,
         userName: String,
         onMoreInfo: @escaping (EntityID) -> Void,
-        onServiceCall: @escaping (HAServiceCall) -> Void
+        onServiceCall: @escaping (HAServiceCall) -> Void,
+        onNavigate: @escaping (String, Bool) -> Void,
+        onOpenURL: @escaping (String) -> Void
     ) -> some View {
         switch card {
         case let .entities(config):
@@ -207,7 +209,9 @@ struct LovelaceElementFactory {
                 config: config,
                 displayContext: displayContext,
                 onMoreInfo: onMoreInfo,
-                onServiceCall: onServiceCall
+                onServiceCall: onServiceCall,
+                onNavigate: onNavigate,
+                onOpenURL: onOpenURL
             )
         case let .historyGraph(config):
             HistoryGraphCardView(
@@ -224,7 +228,9 @@ struct LovelaceElementFactory {
                 config: config,
                 displayContext: displayContext,
                 onMoreInfo: onMoreInfo,
-                onServiceCall: onServiceCall
+                onServiceCall: onServiceCall,
+                onNavigate: onNavigate,
+                onOpenURL: onOpenURL
             )
         case let .markdown(config):
             MarkdownCardView(
@@ -232,7 +238,9 @@ struct LovelaceElementFactory {
                 templateSubscriber: templateSubscriber,
                 userName: userName,
                 onMoreInfo: onMoreInfo,
-                onServiceCall: onServiceCall
+                onServiceCall: onServiceCall,
+                onNavigate: onNavigate,
+                onOpenURL: onOpenURL
             )
         case let .verticalStack(config):
             VerticalStackCardView(
@@ -242,21 +250,27 @@ struct LovelaceElementFactory {
                 templateSubscriber: templateSubscriber,
                 userName: userName,
                 onMoreInfo: onMoreInfo,
-                onServiceCall: onServiceCall
+                onServiceCall: onServiceCall,
+                onNavigate: onNavigate,
+                onOpenURL: onOpenURL
             )
         case let .heading(config):
             HeadingCardView(
                 config: config,
                 displayContext: displayContext,
                 onMoreInfo: onMoreInfo,
-                onServiceCall: onServiceCall
+                onServiceCall: onServiceCall,
+                onNavigate: onNavigate,
+                onOpenURL: onOpenURL
             )
         case let .tile(config):
             TileCardView(
                 config: config,
                 displayContext: displayContext,
                 onMoreInfo: onMoreInfo,
-                onServiceCall: onServiceCall
+                onServiceCall: onServiceCall,
+                onNavigate: onNavigate,
+                onOpenURL: onOpenURL
             )
         default:
             let descriptor = Self.descriptor(for: card)

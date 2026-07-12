@@ -7,6 +7,8 @@ struct MarkdownCardView: View {
     var userName: String = "Home Assistant"
     var onMoreInfo: (EntityID) -> Void = { _ in }
     var onServiceCall: (HAServiceCall) -> Void = { _ in }
+    var onNavigate: (String, Bool) -> Void = { _, _ in }
+    var onOpenURL: (String) -> Void = { _ in }
 
     @State private var renderedContent: String = ""
     @State private var hasRenderedTemplate = false
@@ -98,7 +100,9 @@ struct MarkdownCardView: View {
             entityID: config.entityIDs?.first,
             states: [:],
             onMoreInfo: onMoreInfo,
-            onServiceCall: onServiceCall
+            onServiceCall: onServiceCall,
+            onNavigate: onNavigate,
+            onOpenURL: onOpenURL
         )
         .perform(
             tapAction: config.tapAction,

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct LovelacePanelView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.openURL) private var openExternalURL
     @StateObject private var store: LovelaceStore
 
     private let dashboardPath: String
@@ -99,7 +100,9 @@ struct LovelacePanelView: View {
             onMoreInfo: { entityID in
                 appState.presentMoreInfo(entityID: entityID)
             },
-            onServiceCall: executeServiceCall
+            onServiceCall: executeServiceCall,
+            onNavigate: executeNavigation,
+            onOpenURL: executeOpenURL
         )
         .environment(\.historyGraphDataProvider, historyGraphDataProvider)
         .environment(\.statisticsGraphDataProvider, statisticsGraphDataProvider)
@@ -145,6 +148,63 @@ struct LovelacePanelView: View {
                 )
             }
         }
+    }
+
+    private func executeNavigation(path: String, replace: Bool) {
+        guard let route = appRoute(forNavigationPath: path) else {
+            return
+        }
+        appState.navigate(to: route)
+    }
+
+    private func executeOpenURL(_ urlString: String) {
+        guard let url = URL(string: urlString) else {
+            return
+        }
+        openExternalURL(url)
+    }
+
+    private func appRoute(forNavigationPath path: String) -> AppRoute? {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+
+        let currentDashboardPath = AppRoute.dashboardPath(dashboardPath)
+        if !trimmed.hasPrefix("/") {
+            return lovelaceViewRoute(dashboardPath: currentDashboardPath, routeComponent: trimmed)
+        }
+
+        let normalizedPath = AppRoute.dashboardPath(trimmed)
+        if normalizedPath == "/config" || normalizedPath.hasPrefix("/config/") {
+            return .settings
+        }
+
+        for candidate in knownDashboardPaths(currentDashboardPath: currentDashboardPath) {
+            if normalizedPath == candidate {
+                return .dashboard(urlPath: candidate)
+            }
+
+            let prefix = "\(candidate)/"
+            if normalizedPath.hasPrefix(prefix) {
+                let routeComponent = String(normalizedPath.dropFirst(prefix.count))
+                return lovelaceViewRoute(dashboardPath: candidate, routeComponent: routeComponent)
+            }
+        }
+
+        return nil
+    }
+
+    private func knownDashboardPaths(currentDashboardPath: String) -> [String] {
+        let paths = ([currentDashboardPath] + store.dashboards.map { AppRoute.dashboardPath($0.path) })
+        return Array(Set(paths)).sorted { $0.count > $1.count }
+    }
+
+    private func lovelaceViewRoute(dashboardPath: String, routeComponent: String) -> AppRoute {
+        if let viewIndex = Int(routeComponent) {
+            return .lovelaceView(dashboardPath: dashboardPath, viewPath: nil, viewIndex: viewIndex)
+        }
+        return .lovelaceView(dashboardPath: dashboardPath, viewPath: routeComponent, viewIndex: nil)
     }
 }
 

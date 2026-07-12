@@ -6,6 +6,8 @@ struct WeatherForecastCardView: View {
     let displayContext: EntityDisplayContext
     var onMoreInfo: (EntityID) -> Void = { _ in }
     var onServiceCall: (HAServiceCall) -> Void = { _ in }
+    var onNavigate: (String, Bool) -> Void = { _, _ in }
+    var onOpenURL: (String) -> Void = { _ in }
 
     var body: some View {
         guard let entityID = config.entity, !entityID.isEmpty else {
@@ -88,7 +90,9 @@ struct WeatherForecastCardView: View {
                 entityID: stateObj.entityID,
                 states: displayContext.states,
                 onMoreInfo: onMoreInfo,
-                onServiceCall: onServiceCall
+                onServiceCall: onServiceCall,
+                onNavigate: onNavigate,
+                onOpenURL: onOpenURL
             )
             .perform(
                 tapAction: config.tapAction,

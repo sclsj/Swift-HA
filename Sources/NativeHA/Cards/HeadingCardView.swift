@@ -6,6 +6,8 @@ struct HeadingCardView: View {
     let displayContext: EntityDisplayContext
     var onMoreInfo: (EntityID) -> Void = { _ in }
     var onServiceCall: (HAServiceCall) -> Void = { _ in }
+    var onNavigate: (String, Bool) -> Void = { _, _ in }
+    var onOpenURL: (String) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -37,7 +39,9 @@ struct HeadingCardView: View {
                 entityID: nil,
                 states: displayContext.states,
                 onMoreInfo: onMoreInfo,
-                onServiceCall: onServiceCall
+                onServiceCall: onServiceCall,
+                onNavigate: onNavigate,
+                onOpenURL: onOpenURL
             )
             .perform(tapAction: config.tapAction ?? LovelaceActionConfig(action: "none"))
         }
