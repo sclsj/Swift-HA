@@ -237,6 +237,7 @@ struct LovelaceElementFactory {
                 config: config,
                 templateSubscriber: templateSubscriber,
                 userName: userName,
+                currentUser: displayContext.currentUser,
                 onMoreInfo: onMoreInfo,
                 onServiceCall: onServiceCall,
                 onNavigate: onNavigate,

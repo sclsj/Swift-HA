@@ -228,7 +228,8 @@ private struct StoreReader<Content: View>: View {
             EntityDisplayContext(
                 states: stateStore.states,
                 config: stateStore.config,
-                registryEntries: registryStore.entities
+                registryEntries: registryStore.entities,
+                currentUser: stateStore.currentUser
             ),
             userName,
             stateStore.currentUser?.id

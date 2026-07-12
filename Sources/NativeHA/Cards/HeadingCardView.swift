@@ -38,6 +38,7 @@ struct HeadingCardView: View {
             CardActionDispatcher(
                 entityID: nil,
                 states: displayContext.states,
+                currentUser: displayContext.currentUser,
                 onMoreInfo: onMoreInfo,
                 onServiceCall: onServiceCall,
                 onNavigate: onNavigate,

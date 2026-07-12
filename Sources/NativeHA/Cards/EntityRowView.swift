@@ -141,6 +141,7 @@ struct EntityRowView: View {
         CardActionDispatcher(
             entityID: stateObj.entityID,
             states: displayContext.states,
+            currentUser: displayContext.currentUser,
             onMoreInfo: onMoreInfo,
             onServiceCall: onServiceCall,
             onNavigate: onNavigate,

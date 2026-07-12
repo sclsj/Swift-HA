@@ -5,6 +5,7 @@ struct MarkdownCardView: View {
     let config: MarkdownCardConfig
     var templateSubscriber: MarkdownTemplateSubscribing?
     var userName: String = "Home Assistant"
+    var currentUser: HAUser?
     var onMoreInfo: (EntityID) -> Void = { _ in }
     var onServiceCall: (HAServiceCall) -> Void = { _ in }
     var onNavigate: (String, Bool) -> Void = { _, _ in }
@@ -99,6 +100,7 @@ struct MarkdownCardView: View {
         CardActionDispatcher(
             entityID: config.entityIDs?.first,
             states: [:],
+            currentUser: currentUser,
             onMoreInfo: onMoreInfo,
             onServiceCall: onServiceCall,
             onNavigate: onNavigate,

@@ -183,6 +183,7 @@ struct TileCardView: View {
         CardActionDispatcher(
             entityID: stateObj.entityID,
             states: displayContext.states,
+            currentUser: displayContext.currentUser,
             onMoreInfo: onMoreInfo,
             onServiceCall: onServiceCall,
             onNavigate: onNavigate,
@@ -200,6 +201,7 @@ struct TileCardView: View {
         let dispatcher = CardActionDispatcher(
             entityID: stateObj.entityID,
             states: displayContext.states,
+            currentUser: displayContext.currentUser,
             onMoreInfo: onMoreInfo,
             onServiceCall: onServiceCall,
             onNavigate: onNavigate,
@@ -211,7 +213,8 @@ struct TileCardView: View {
             dispatcher.perform(Self.resolveIconTapAction(
                 config: config,
                 entityID: stateObj.entityID,
-                states: displayContext.states
+                states: displayContext.states,
+                currentUser: displayContext.currentUser
             ))
         case .hold, .doubleTap:
             dispatcher.perform(
@@ -226,11 +229,12 @@ struct TileCardView: View {
     static func resolveIconTapAction(
         config: TileCardConfig,
         entityID: EntityID,
-        states: [EntityID: HassEntity]
+        states: [EntityID: HassEntity],
+        currentUser: HAUser? = nil
     ) -> LovelaceResolvedAction {
         LovelaceActionResolver.resolveTileIconTap(
             explicitAction: config.iconTapAction,
-            context: LovelaceActionResolutionContext(entity: entityID, states: states)
+            context: LovelaceActionResolutionContext(entity: entityID, states: states, currentUser: currentUser)
         )
     }
 
