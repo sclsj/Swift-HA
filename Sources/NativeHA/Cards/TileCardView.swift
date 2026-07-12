@@ -192,19 +192,29 @@ struct TileCardView: View {
         )
     }
 
-    private func performIconGesture(_ stateObj: HassEntity, gesture: LovelaceActionGesture) {
-        CardActionDispatcher(
+    func performIconGesture(_ stateObj: HassEntity, gesture: LovelaceActionGesture) {
+        let dispatcher = CardActionDispatcher(
             entityID: stateObj.entityID,
             states: displayContext.states,
             onMoreInfo: onMoreInfo,
             onServiceCall: onServiceCall
         )
-        .perform(
-            gesture: gesture,
-            tapAction: config.iconTapAction,
-            holdAction: config.iconHoldAction,
-            doubleTapAction: config.iconDoubleTapAction
-        )
+
+        switch gesture {
+        case .tap:
+            dispatcher.perform(Self.resolveIconTapAction(
+                config: config,
+                entityID: stateObj.entityID,
+                states: displayContext.states
+            ))
+        case .hold, .doubleTap:
+            dispatcher.perform(
+                gesture: gesture,
+                tapAction: config.iconTapAction,
+                holdAction: config.iconHoldAction,
+                doubleTapAction: config.iconDoubleTapAction
+            )
+        }
     }
 
     static func resolveIconTapAction(

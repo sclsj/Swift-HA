@@ -310,6 +310,71 @@ final class ClimateControlModelTests: XCTestCase {
 final class Module12TileActionTests: XCTestCase {
     private let decoder = JSONDecoder()
 
+    func testTileIconGestureUsesTileDefaultActionInActualDispatchPath() throws {
+        let switchState = entity("switch.power", state: "on", attributes: [:])
+        var openedEntities: [EntityID] = []
+        var serviceCalls: [HAServiceCall] = []
+        let switchView = TileCardView(
+            config: try tileConfig(#"{"type": "tile", "entity": "switch.power"}"#),
+            displayContext: EntityDisplayContext(states: [switchState.entityID: switchState]),
+            onMoreInfo: { openedEntities.append($0) },
+            onServiceCall: { serviceCalls.append($0) }
+        )
+
+        switchView.performIconGesture(switchState, gesture: .tap)
+
+        XCTAssertTrue(openedEntities.isEmpty)
+        XCTAssertEqual(serviceCalls, [
+            HAServiceCall(
+                domain: "switch",
+                service: "turn_off",
+                serviceData: ["entity_id": .string("switch.power")]
+            )
+        ])
+
+        let sensorState = entity("sensor.temperature", state: "21", attributes: [:])
+        openedEntities = []
+        serviceCalls = []
+        let sensorView = TileCardView(
+            config: try tileConfig(#"{"type": "tile", "entity": "sensor.temperature"}"#),
+            displayContext: EntityDisplayContext(states: [sensorState.entityID: sensorState]),
+            onMoreInfo: { openedEntities.append($0) },
+            onServiceCall: { serviceCalls.append($0) }
+        )
+
+        sensorView.performIconGesture(sensorState, gesture: .tap)
+
+        XCTAssertTrue(openedEntities.isEmpty)
+        XCTAssertTrue(serviceCalls.isEmpty)
+    }
+
+    func testExplicitTileIconGestureActionsPreservePrecedence() throws {
+        let state = entity("switch.power", state: "on", attributes: [:])
+        var openedEntities: [EntityID] = []
+        var serviceCalls: [HAServiceCall] = []
+        let view = TileCardView(
+            config: try tileConfig("""
+            {
+              "type": "tile",
+              "entity": "switch.power",
+              "icon_tap_action": {"action": "more-info", "entity": "sensor.tap"},
+              "icon_hold_action": {"action": "more-info", "entity": "sensor.hold"},
+              "icon_double_tap_action": {"action": "more-info", "entity": "sensor.double"}
+            }
+            """),
+            displayContext: EntityDisplayContext(states: [state.entityID: state]),
+            onMoreInfo: { openedEntities.append($0) },
+            onServiceCall: { serviceCalls.append($0) }
+        )
+
+        view.performIconGesture(state, gesture: .tap)
+        view.performIconGesture(state, gesture: .hold)
+        view.performIconGesture(state, gesture: .doubleTap)
+
+        XCTAssertEqual(openedEntities, ["sensor.tap", "sensor.hold", "sensor.double"])
+        XCTAssertTrue(serviceCalls.isEmpty)
+    }
+
     func testExplicitTileTapAndIconActionsPreserveLovelacePrecedence() throws {
         let config = try tileConfig("""
         {
