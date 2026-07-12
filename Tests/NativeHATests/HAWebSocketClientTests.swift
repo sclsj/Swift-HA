@@ -307,8 +307,14 @@ final class HAWebSocketClientTests: XCTestCase {
 
         XCTAssertTrue(transport.releaseNextSend(type: "request_2"))
         try await waitForNumberedRequestCount(3, transport: transport)
-        XCTAssertEqual(try transport.numberedSentObjects().compactMap { $0["id"]?.integerValue }, [1, 2, 4])
+        XCTAssertEqual(try transport.numberedSentObjects().compactMap { $0["id"]?.integerValue }, [1, 2, 3])
         transport.enqueue(resultMessage(id: 2))
+
+        XCTAssertTrue(transport.releaseNextSend(type: "request_3"))
+        try await waitForNumberedRequestCount(4, transport: transport)
+        XCTAssertEqual(try transport.numberedSentObjects().compactMap { $0["id"]?.integerValue }, [1, 2, 3, 4])
+        
+        transport.enqueue(resultMessage(id: 3))
 
         XCTAssertTrue(transport.releaseNextSend(type: "request_4"))
         transport.enqueue(resultMessage(id: 4))
@@ -411,6 +417,7 @@ final class HAWebSocketClientTests: XCTestCase {
                     accessToken: "test-token"
                 )
             }
+            func refreshCredentials() async throws {}
         }
         let client = HAWebSocketClient(
             credentialProvider: MockCreds(),

@@ -16,6 +16,7 @@ public protocol Clock {
 
 public protocol CredentialProvider {
     func credentials() throws -> HomeAssistantCredentials
+    func refreshCredentials() async throws
 }
 
 public struct HomeAssistantCredentials: Equatable {
@@ -170,6 +171,10 @@ public struct FileCredentialProvider: CredentialProvider {
         }
 
         return HomeAssistantCredentials(serverURL: serverURL, accessToken: token)
+    }
+
+    public func refreshCredentials() async throws {
+        // No-op for FileCredentialProvider. The file is read dynamically on every `credentials()` call.
     }
 
     private func readTrimmedFile(at path: String) throws -> String {

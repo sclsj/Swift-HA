@@ -98,4 +98,5 @@ private struct TestCredentialProvider: CredentialProvider {
             accessToken: "test-token"
         )
     }
+    func refreshCredentials() async throws {}
 }

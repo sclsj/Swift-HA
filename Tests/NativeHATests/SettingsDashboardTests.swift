@@ -216,4 +216,5 @@ private struct SettingsTestCredentialProvider: CredentialProvider {
             accessToken: "test-token"
         )
     }
+    func refreshCredentials() async throws {}
 }
