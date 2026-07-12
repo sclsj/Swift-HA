@@ -40,7 +40,7 @@ struct ChartVisibleRange: Equatable, Hashable {
     }
 
     var midpoint: Double {
-        lowerBound + span / 2
+        lowerBound + (upperBound - lowerBound) / 2
     }
 
     func contains(_ value: Double) -> Bool {
@@ -97,6 +97,8 @@ struct ChartVisibleRange: Equatable, Hashable {
 }
 
 struct ChartValueRange: Equatable, Hashable {
+    static let logarithmicMinimum = Double.ulpOfOne
+
     var lowerBound: Double
     var upperBound: Double
 
@@ -123,21 +125,39 @@ struct ChartValueRange: Equatable, Hashable {
         return self
     }
 
+    func clampedForLogarithmicScale() -> ChartValueRange {
+        let lower = max(lowerBound, Self.logarithmicMinimum)
+        let upper = max(upperBound, lower * 10)
+        return ChartValueRange(lower, upper).expandedIfFlat()
+    }
+
     static func finiteOrDefault(minimum: Double?, maximum: Double?) -> ChartValueRange {
-        guard let minimum = minimum,
-              let maximum = maximum,
-              minimum.isFinite,
-              maximum.isFinite else {
+        let finiteMinimum = minimum.flatMap { $0.isFinite ? $0 : nil }
+        let finiteMaximum = maximum.flatMap { $0.isFinite ? $0 : nil }
+
+        switch (finiteMinimum, finiteMaximum) {
+        case let (.some(minimum), .some(maximum)):
+            return ChartValueRange(minimum, maximum).expandedIfFlat()
+        case let (.some(minimum), .none):
+            return ChartValueRange(minimum, minimum + 1).expandedIfFlat()
+        case let (.none, .some(maximum)):
+            return ChartValueRange(maximum - 1, maximum).expandedIfFlat()
+        case (.none, .none):
             return ChartValueRange(0, 1)
         }
-        return ChartValueRange(minimum, maximum).expandedIfFlat()
     }
+}
+
+enum AxisScaleKind: Equatable {
+    case linear
+    case logarithmic
 }
 
 struct AxisScale: Equatable {
     var domain: ChartValueRange
     var pixelLowerBound: CGFloat
     var pixelUpperBound: CGFloat
+    var kind: AxisScaleKind
 
     init(domain: ChartValueRange, pixels: ClosedRange<CGFloat>) {
         self.init(
@@ -147,18 +167,48 @@ struct AxisScale: Equatable {
         )
     }
 
-    init(domain: ChartValueRange, pixelLowerBound: CGFloat, pixelUpperBound: CGFloat) {
-        self.domain = domain.expandedIfFlat()
-        self.pixelLowerBound = pixelLowerBound
-        self.pixelUpperBound = pixelUpperBound
+    init(
+        domain: ChartValueRange,
+        pixelLowerBound: CGFloat,
+        pixelUpperBound: CGFloat,
+        kind: AxisScaleKind = .linear
+    ) {
+        self.kind = kind
+        self.domain = kind == .logarithmic
+            ? domain.clampedForLogarithmicScale()
+            : domain.expandedIfFlat()
+        self.pixelLowerBound = pixelLowerBound.isFinite ? pixelLowerBound : 0
+        self.pixelUpperBound = pixelUpperBound.isFinite ? pixelUpperBound : self.pixelLowerBound
     }
 
     func pixel(for value: Double) -> CGFloat {
+        pixelIfValid(for: value) ?? pixelLowerBound
+    }
+
+    func pixelIfValid(for value: Double) -> CGFloat? {
         guard value.isFinite, domain.span > 0 else {
-            return pixelLowerBound
+            return nil
         }
 
-        let ratio = (value - domain.lowerBound) / domain.span
+        let ratio: Double
+        switch kind {
+        case .linear:
+            ratio = (value - domain.lowerBound) / domain.span
+        case .logarithmic:
+            guard value > 0 else {
+                return nil
+            }
+            let lower = log10(domain.lowerBound)
+            let upper = log10(domain.upperBound)
+            guard upper > lower else {
+                return nil
+            }
+            ratio = (log10(value) - lower) / (upper - lower)
+        }
+
+        guard ratio.isFinite else {
+            return nil
+        }
         return pixelLowerBound + CGFloat(ratio) * (pixelUpperBound - pixelLowerBound)
     }
 
@@ -169,7 +219,17 @@ struct AxisScale: Equatable {
         }
 
         let ratio = Double((pixel - pixelLowerBound) / pixelSpan)
-        return domain.lowerBound + ratio * domain.span
+        switch kind {
+        case .linear:
+            return domain.lowerBound + ratio * domain.span
+        case .logarithmic:
+            let lower = log10(domain.lowerBound)
+            let upper = log10(domain.upperBound)
+            guard upper > lower else {
+                return domain.lowerBound
+            }
+            return pow(10, lower + ratio * (upper - lower))
+        }
     }
 
     static func xScale(visibleRange: ChartVisibleRange, plotRect: CGRect) -> AxisScale {
@@ -179,11 +239,16 @@ struct AxisScale: Equatable {
         )
     }
 
-    static func yScale(domain: ChartValueRange, plotRect: CGRect) -> AxisScale {
+    static func yScale(
+        domain: ChartValueRange,
+        plotRect: CGRect,
+        kind: AxisScaleKind = .linear
+    ) -> AxisScale {
         AxisScale(
             domain: domain,
             pixelLowerBound: plotRect.maxY,
-            pixelUpperBound: plotRect.minY
+            pixelUpperBound: plotRect.minY,
+            kind: kind
         )
     }
 
@@ -191,13 +256,18 @@ struct AxisScale: Equatable {
         in series: [LineSeries],
         visibleRange: ChartVisibleRange,
         fixedMinimum: Double? = nil,
-        fixedMaximum: Double? = nil
+        fixedMaximum: Double? = nil,
+        fitYData: Bool = false,
+        scaleKind: AxisScaleKind = .linear
     ) -> ChartValueRange {
         var observedMinimum: Double?
         var observedMaximum: Double?
 
         func observe(_ value: Double?) {
             guard let value = value, value.isFinite else {
+                return
+            }
+            if scaleKind == .logarithmic, value <= 0 {
                 return
             }
             observedMinimum = observedMinimum.map { min($0, value) } ?? value
@@ -212,9 +282,53 @@ struct AxisScale: Equatable {
             )
         }
 
-        let minimum = fixedMinimum.flatMap { $0.isFinite ? $0 : nil } ?? observedMinimum
-        let maximum = fixedMaximum.flatMap { $0.isFinite ? $0 : nil } ?? observedMaximum
-        return ChartValueRange.finiteOrDefault(minimum: minimum, maximum: maximum)
+        let minimum = resolvedMinimum(
+            fixed: fixedMinimum,
+            observed: observedMinimum,
+            fitYData: fitYData
+        )
+        let maximum = resolvedMaximum(
+            fixed: fixedMaximum,
+            observed: observedMaximum,
+            fitYData: fitYData
+        )
+        let range = ChartValueRange.finiteOrDefault(minimum: minimum, maximum: maximum)
+        return scaleKind == .logarithmic ? range.clampedForLogarithmicScale() : range
+    }
+
+    private static func resolvedMinimum(
+        fixed: Double?,
+        observed: Double?,
+        fitYData: Bool
+    ) -> Double? {
+        guard let fixed = fixed, fixed.isFinite else {
+            return observed
+        }
+        guard fitYData, let observed = observed, observed.isFinite else {
+            return fixed
+        }
+        return min(roundedYAxis(observed, rounding: floor), fixed)
+    }
+
+    private static func resolvedMaximum(
+        fixed: Double?,
+        observed: Double?,
+        fitYData: Bool
+    ) -> Double? {
+        guard let fixed = fixed, fixed.isFinite else {
+            return observed
+        }
+        guard fitYData, let observed = observed, observed.isFinite else {
+            return fixed
+        }
+        return max(roundedYAxis(observed, rounding: ceil), fixed)
+    }
+
+    private static func roundedYAxis(
+        _ value: Double,
+        rounding: (Double) -> Double
+    ) -> Double {
+        abs(value) < 1 ? value : rounding(value)
     }
 
     private static func observeVisibleStepValues(

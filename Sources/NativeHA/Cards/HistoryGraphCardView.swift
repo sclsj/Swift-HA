@@ -440,6 +440,8 @@ struct HistoryGraphCardView: View {
                     initialVisibleRange: chartData.visibleRange,
                     fixedMinimumY: model.minYAxis,
                     fixedMaximumY: model.maxYAxis,
+                    fitYData: model.fitYData,
+                    logarithmicScale: model.logarithmicScale,
                     minimumHeight: 180
                 )
             }

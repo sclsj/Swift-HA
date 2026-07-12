@@ -25,14 +25,15 @@ struct ChartGeometry: Equatable {
         size: CGSize,
         visibleRange: ChartVisibleRange,
         yDomain: ChartValueRange,
-        insets: ChartEdgeInsets
+        insets: ChartEdgeInsets,
+        yScaleKind: AxisScaleKind = .linear
     ) -> ChartGeometry {
         let plotRect = ChartGeometryCalculator.plotRect(size: size, insets: insets)
         return ChartGeometry(
             size: size,
             plotRect: plotRect,
             xScale: AxisScale.xScale(visibleRange: visibleRange, plotRect: plotRect),
-            yScale: AxisScale.yScale(domain: yDomain, plotRect: plotRect)
+            yScale: AxisScale.yScale(domain: yDomain, plotRect: plotRect, kind: yScaleKind)
         )
     }
 

@@ -72,20 +72,26 @@ enum LineChartRenderer {
         yAxisMetadata: YAxisMetadata = YAxisMetadata(),
         fixedMinimumY: Double? = nil,
         fixedMaximumY: Double? = nil,
+        fitYData: Bool = false,
+        logarithmicScale: Bool = false,
         theme: ChartTheme = .default,
         maximumDetail: Double? = nil
     ) -> PreparedLineChart {
+        let yScaleKind: AxisScaleKind = logarithmicScale ? .logarithmic : .linear
         let yDomain = AxisScale.lineYDomain(
             in: series,
             visibleRange: visibleRange,
             fixedMinimum: fixedMinimumY,
-            fixedMaximum: fixedMaximumY
+            fixedMaximum: fixedMaximumY,
+            fitYData: fitYData,
+            scaleKind: yScaleKind
         )
         let geometry = ChartGeometry.line(
             size: size,
             visibleRange: visibleRange,
             yDomain: yDomain,
-            insets: theme.plotInsets
+            insets: theme.plotInsets,
+            yScaleKind: yScaleKind
         )
         let resolvedMetadata = YAxisMetadata(
             unit: yAxisMetadata.unit,
@@ -165,9 +171,12 @@ enum LineChartRenderer {
                 continue
             }
 
+            guard let y = yScale.pixelIfValid(for: value) else {
+                continue
+            }
             let position = CGPoint(
                 x: chart.geometry.xScale.pixel(for: timestamp),
-                y: yScale.pixel(for: value)
+                y: y
             )
             let distance: CGFloat
             if let screenLocation = screenLocation {
@@ -210,19 +219,140 @@ enum LineChartRenderer {
         maximumDetail: Double?,
         visibleRange: ChartVisibleRange
     ) -> LineSeries {
+        var visibleSeries = series
+        visibleSeries.points = visibleStepWindowPoints(
+            series.points,
+            visibleRange: visibleRange
+        )
+
         guard let maximumDetail = maximumDetail,
               maximumDetail.isFinite,
               maximumDetail > 0,
-              Double(series.points.count) > maximumDetail else {
-            return series
+              Double(visibleSeries.points.count) > maximumDetail else {
+            return visibleSeries
         }
 
-        return DownSampler.downSample(
-            series,
+        let downsampled = DownSampler.downSample(
+            visibleSeries.points,
             maxDetails: maximumDetail,
             minX: visibleRange.lowerBound,
             maxX: visibleRange.upperBound
         )
+        visibleSeries.points = mergeRequiredStepPoints(
+            source: visibleSeries.points,
+            sampled: downsampled,
+            requiredIndexes: requiredStepPointIndexes(
+                in: visibleSeries.points,
+                visibleRange: visibleRange
+            )
+        )
+        return visibleSeries
+    }
+
+    private static func visibleStepWindowPoints(
+        _ points: [LinePoint],
+        visibleRange: ChartVisibleRange
+    ) -> [LinePoint] {
+        var result: [LinePoint] = []
+        var lastFiniteBeforeLower: LinePoint?
+        var hasFinitePointAtOrBeforeUpper = false
+
+        for point in points where point.x.isFinite {
+            if point.x < visibleRange.lowerBound {
+                if let value = point.y, value.isFinite {
+                    lastFiniteBeforeLower = point
+                } else {
+                    lastFiniteBeforeLower = nil
+                }
+                continue
+            }
+
+            if point.x <= visibleRange.upperBound {
+                if result.isEmpty, let lastFiniteBeforeLower = lastFiniteBeforeLower {
+                    result.append(lastFiniteBeforeLower)
+                    hasFinitePointAtOrBeforeUpper = true
+                }
+                result.append(point)
+                if let value = point.y, value.isFinite {
+                    hasFinitePointAtOrBeforeUpper = true
+                } else {
+                    lastFiniteBeforeLower = nil
+                }
+                continue
+            }
+
+            if result.isEmpty, let lastFiniteBeforeLower = lastFiniteBeforeLower {
+                result.append(lastFiniteBeforeLower)
+                hasFinitePointAtOrBeforeUpper = true
+            }
+
+            if hasFinitePointAtOrBeforeUpper,
+               let value = point.y,
+               value.isFinite {
+                result.append(point)
+            }
+            break
+        }
+
+        return result
+    }
+
+    private static func requiredStepPointIndexes(
+        in points: [LinePoint],
+        visibleRange: ChartVisibleRange
+    ) -> Set<Int> {
+        var required: Set<Int> = []
+        var currentRun: [Int] = []
+
+        func flushRun() {
+            guard !currentRun.isEmpty else {
+                return
+            }
+            required.insert(currentRun[0])
+            required.insert(currentRun[currentRun.count - 1])
+            currentRun.removeAll(keepingCapacity: true)
+        }
+
+        for index in points.indices {
+            let point = points[index]
+            if point.x.isFinite, let value = point.y, value.isFinite {
+                currentRun.append(index)
+            } else {
+                flushRun()
+                if point.x.isFinite, visibleRange.contains(point.x) {
+                    required.insert(index)
+                }
+            }
+        }
+        flushRun()
+
+        return required
+    }
+
+    private static func mergeRequiredStepPoints(
+        source: [LinePoint],
+        sampled: [LinePoint],
+        requiredIndexes: Set<Int>
+    ) -> [LinePoint] {
+        var sampledCounts: [LinePointKey: Int] = [:]
+        for point in sampled {
+            sampledCounts[LinePointKey(point)] = (sampledCounts[LinePointKey(point)] ?? 0) + 1
+        }
+
+        var result: [LinePoint] = []
+        result.reserveCapacity(sampled.count + requiredIndexes.count)
+        for index in source.indices {
+            let point = source[index]
+            let key = LinePointKey(point)
+            let sampledCount = sampledCounts[key] ?? 0
+            if requiredIndexes.contains(index) || sampledCount > 0 {
+                result.append(point)
+                if sampledCount > 0 {
+                    sampledCounts[key] = sampledCount - 1
+                }
+            }
+        }
+        return result
     }
 
     private static func prepareSeries(
@@ -384,7 +514,8 @@ enum LineChartRenderer {
         guard timestamp.isFinite,
               visibleRange.contains(timestamp),
               let value = value,
-              value.isFinite else {
+              value.isFinite,
+              let y = yScale.pixelIfValid(for: value) else {
             return nil
         }
 
@@ -394,7 +525,7 @@ enum LineChartRenderer {
             source: source,
             position: CGPoint(
                 x: geometry.xScale.pixel(for: timestamp),
-                y: yScale.pixel(for: value)
+                y: y
             )
         )
     }
@@ -490,12 +621,26 @@ private struct LineSegmentStyle: Equatable {
     var alpha: Double
 }
 
+private struct LinePointKey: Hashable {
+    var x: Double
+    var y: Double?
+    var source: String
+
+    init(_ point: LinePoint) {
+        x = point.x
+        y = point.y
+        source = point.source.rawValue
+    }
+}
+
 struct LineHistoryChartView: View {
     var series: [LineSeries]
     var yAxisMetadata: YAxisMetadata
     var initialVisibleRange: ChartVisibleRange?
     var fixedMinimumY: Double?
     var fixedMaximumY: Double?
+    var fitYData: Bool
+    var logarithmicScale: Bool
     var theme: ChartTheme
     var minimumHeight: CGFloat
 
@@ -503,6 +648,7 @@ struct LineHistoryChartView: View {
     @State private var interaction: ChartInteractionState?
     @State private var dragStartRange: ChartVisibleRange?
     @State private var zoomStartRange: ChartVisibleRange?
+    @State private var lastTap: ChartInteractionTap?
     @State private var tooltip: ChartTooltipModel?
 
     init(
@@ -511,6 +657,8 @@ struct LineHistoryChartView: View {
         initialVisibleRange: ChartVisibleRange? = nil,
         fixedMinimumY: Double? = nil,
         fixedMaximumY: Double? = nil,
+        fitYData: Bool = false,
+        logarithmicScale: Bool = false,
         theme: ChartTheme = .default,
         minimumHeight: CGFloat = 200
     ) {
@@ -519,17 +667,19 @@ struct LineHistoryChartView: View {
         self.initialVisibleRange = initialVisibleRange
         self.fixedMinimumY = fixedMinimumY
         self.fixedMaximumY = fixedMaximumY
+        self.fitYData = fitYData
+        self.logarithmicScale = logarithmicScale
         self.theme = theme
         self.minimumHeight = minimumHeight
     }
 
     var body: some View {
         GeometryReader { proxy in
-            let dataBounds = LineChartRenderer.dataRange(in: series)
-            let currentInteraction = interaction ?? ChartInteractionState(
+            let dataBounds = initialVisibleRange ?? LineChartRenderer.dataRange(in: series)
+            let currentInteraction = (interaction ?? ChartInteractionState(
                 dataBounds: dataBounds,
                 visibleRange: initialVisibleRange
-            )
+            )).replacingDataBounds(dataBounds)
             let prepared = LineChartRenderer.prepare(
                 series: series,
                 visibleRange: currentInteraction.visibleRange,
@@ -537,6 +687,8 @@ struct LineHistoryChartView: View {
                 yAxisMetadata: yAxisMetadata,
                 fixedMinimumY: fixedMinimumY,
                 fixedMaximumY: fixedMaximumY,
+                fitYData: fitYData,
+                logarithmicScale: logarithmicScale,
                 theme: theme,
                 maximumDetail: max(1, Double(proxy.size.width * displayScale))
             )
@@ -552,12 +704,6 @@ struct LineHistoryChartView: View {
             .contentShape(Rectangle())
             .gesture(dragGesture(prepared: prepared, dataBounds: dataBounds))
             .simultaneousGesture(zoomGesture(dataBounds: dataBounds))
-            .onTapGesture(count: 2) {
-                var state = interaction ?? currentInteraction
-                state.toggleThirtyPercentZoom()
-                interaction = state
-                tooltip = nil
-            }
         }
         .frame(minHeight: minimumHeight)
     }
@@ -566,13 +712,14 @@ struct LineHistoryChartView: View {
         prepared: PreparedLineChart,
         dataBounds: ChartVisibleRange
     ) -> some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: 0)
             .onChanged { value in
-                var state = interaction ?? ChartInteractionState(
+                var state = (interaction ?? ChartInteractionState(
                     dataBounds: dataBounds,
                     visibleRange: initialVisibleRange
-                )
-                if dragStartRange == nil {
+                )).replacingDataBounds(dataBounds)
+
+                if dragStartRange == nil, !ChartInteractionTap.isTapMovement(value.translation) {
                     dragStartRange = state.visibleRange
                 }
                 if let dragStartRange = dragStartRange {
@@ -589,18 +736,49 @@ struct LineHistoryChartView: View {
                     screenLocation: value.location
                 )
             }
-            .onEnded { _ in
+            .onEnded { value in
+                if ChartInteractionTap.isTapMovement(value.translation) {
+                    handleTap(
+                        location: value.location,
+                        time: value.time,
+                        prepared: prepared,
+                        dataBounds: dataBounds
+                    )
+                }
                 dragStartRange = nil
             }
+    }
+
+    private func handleTap(
+        location: CGPoint,
+        time: Date,
+        prepared: PreparedLineChart,
+        dataBounds: ChartVisibleRange
+    ) {
+        let tap = ChartInteractionTap(time: time, location: location)
+        guard lastTap?.isDoubleTap(with: tap) == true else {
+            lastTap = tap
+            return
+        }
+
+        var state = (interaction ?? ChartInteractionState(
+            dataBounds: dataBounds,
+            visibleRange: initialVisibleRange
+        )).replacingDataBounds(dataBounds)
+        let anchor = prepared.geometry.xScale.value(for: location.x)
+        state.toggleThirtyPercentZoom(anchorTimestamp: anchor)
+        interaction = state
+        tooltip = nil
+        lastTap = nil
     }
 
     private func zoomGesture(dataBounds: ChartVisibleRange) -> some Gesture {
         MagnificationGesture()
             .onChanged { value in
-                var state = interaction ?? ChartInteractionState(
+                var state = (interaction ?? ChartInteractionState(
                     dataBounds: dataBounds,
                     visibleRange: initialVisibleRange
-                )
+                )).replacingDataBounds(dataBounds)
                 if zoomStartRange == nil {
                     zoomStartRange = state.visibleRange
                 }
@@ -715,8 +893,8 @@ struct LineHistoryChartView: View {
 
         for index in 0...tickCount {
             let ratio = Double(index) / Double(tickCount)
-            let value = chart.yDomain.lowerBound + chart.yDomain.span * ratio
-            let y = yScale.pixel(for: value)
+            let y = plotRect.maxY - plotRect.height * CGFloat(ratio)
+            let value = yScale.value(for: y)
             let label = HANumberFormatting.format(
                 value,
                 maximumFractionDigits: chart.yAxisMetadata.fractionDigits

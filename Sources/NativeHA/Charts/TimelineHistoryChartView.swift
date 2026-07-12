@@ -164,27 +164,32 @@ enum TimelineChartRenderer {
             return nil
         }
 
-        var x = geometry.xScale.pixel(for: clippedStart)
-        var width = geometry.xScale.pixel(for: clippedEnd) - x
-        if width <= 0 {
-            guard visibleRange.contains(clippedStart) else {
-                return nil
-            }
-            width = theme.minimumTimelineSegmentWidth
-        } else if width < theme.minimumTimelineSegmentWidth {
-            width = theme.minimumTimelineSegmentWidth
+        let startX = geometry.xScale.pixel(for: clippedStart)
+        let endX = geometry.xScale.pixel(for: clippedEnd)
+        let minimumWidth = min(
+            max(0, theme.minimumTimelineSegmentWidth),
+            max(0, geometry.plotRect.width)
+        )
+        let rawWidth = max(0, endX - startX)
+        var x = startX
+        var width = rawWidth
+
+        if width < minimumWidth {
+            let anchorX = rawWidth > 0 ? (startX + endX) / 2 : startX
+            x = min(
+                max(anchorX - minimumWidth / 2, geometry.plotRect.minX),
+                max(geometry.plotRect.minX, geometry.plotRect.maxX - minimumWidth)
+            )
+            width = minimumWidth
         }
 
-        if x + width > geometry.plotRect.maxX {
-            width = max(0, geometry.plotRect.maxX - x)
-        }
-        if x < geometry.plotRect.minX {
-            width -= geometry.plotRect.minX - x
-            x = geometry.plotRect.minX
-        }
-        guard width >= 0 else {
+        let clippedMinX = max(x, geometry.plotRect.minX)
+        let clippedMaxX = min(x + width, geometry.plotRect.maxX)
+        guard clippedMaxX >= clippedMinX else {
             return nil
         }
+        x = clippedMinX
+        width = clippedMaxX - clippedMinX
 
         let rect = CGRect(x: x, y: rowRect.minY, width: width, height: rowRect.height)
         let labelWidth = estimatedTextWidth(segment.stateLocalized, fontSize: 12)
@@ -225,6 +230,7 @@ struct TimelineHistoryChartView: View {
     @State private var interaction: ChartInteractionState?
     @State private var dragStartRange: ChartVisibleRange?
     @State private var zoomStartRange: ChartVisibleRange?
+    @State private var lastTap: ChartInteractionTap?
     @State private var tooltip: ChartTooltipModel?
 
     init(
@@ -245,11 +251,11 @@ struct TimelineHistoryChartView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let dataBounds = TimelineChartRenderer.dataRange(in: rows)
-            let currentInteraction = interaction ?? ChartInteractionState(
+            let dataBounds = initialVisibleRange ?? TimelineChartRenderer.dataRange(in: rows)
+            let currentInteraction = (interaction ?? ChartInteractionState(
                 dataBounds: dataBounds,
                 visibleRange: initialVisibleRange
-            )
+            )).replacingDataBounds(dataBounds)
             let prepared = TimelineChartRenderer.prepare(
                 rows: rows,
                 visibleRange: currentInteraction.visibleRange,
@@ -270,12 +276,6 @@ struct TimelineHistoryChartView: View {
             .contentShape(Rectangle())
             .gesture(dragGesture(prepared: prepared, dataBounds: dataBounds))
             .simultaneousGesture(zoomGesture(dataBounds: dataBounds))
-            .onTapGesture(count: 2) {
-                var state = interaction ?? currentInteraction
-                state.toggleThirtyPercentZoom()
-                interaction = state
-                tooltip = nil
-            }
         }
         .frame(minHeight: minimumHeight)
     }
@@ -284,13 +284,13 @@ struct TimelineHistoryChartView: View {
         prepared: PreparedTimelineChart,
         dataBounds: ChartVisibleRange
     ) -> some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: 0)
             .onChanged { value in
-                var state = interaction ?? ChartInteractionState(
+                var state = (interaction ?? ChartInteractionState(
                     dataBounds: dataBounds,
                     visibleRange: initialVisibleRange
-                )
-                if dragStartRange == nil {
+                )).replacingDataBounds(dataBounds)
+                if dragStartRange == nil, !ChartInteractionTap.isTapMovement(value.translation) {
                     dragStartRange = state.visibleRange
                 }
                 if let dragStartRange = dragStartRange {
@@ -303,18 +303,49 @@ struct TimelineHistoryChartView: View {
                 }
                 tooltip = TimelineChartRenderer.hitTest(prepared, point: value.location)
             }
-            .onEnded { _ in
+            .onEnded { value in
+                if ChartInteractionTap.isTapMovement(value.translation) {
+                    handleTap(
+                        location: value.location,
+                        time: value.time,
+                        prepared: prepared,
+                        dataBounds: dataBounds
+                    )
+                }
                 dragStartRange = nil
             }
+    }
+
+    private func handleTap(
+        location: CGPoint,
+        time: Date,
+        prepared: PreparedTimelineChart,
+        dataBounds: ChartVisibleRange
+    ) {
+        let tap = ChartInteractionTap(time: time, location: location)
+        guard lastTap?.isDoubleTap(with: tap) == true else {
+            lastTap = tap
+            return
+        }
+
+        var state = (interaction ?? ChartInteractionState(
+            dataBounds: dataBounds,
+            visibleRange: initialVisibleRange
+        )).replacingDataBounds(dataBounds)
+        let anchor = prepared.geometry.xScale.value(for: location.x)
+        state.toggleThirtyPercentZoom(anchorTimestamp: anchor)
+        interaction = state
+        tooltip = nil
+        lastTap = nil
     }
 
     private func zoomGesture(dataBounds: ChartVisibleRange) -> some Gesture {
         MagnificationGesture()
             .onChanged { value in
-                var state = interaction ?? ChartInteractionState(
+                var state = (interaction ?? ChartInteractionState(
                     dataBounds: dataBounds,
                     visibleRange: initialVisibleRange
-                )
+                )).replacingDataBounds(dataBounds)
                 if zoomStartRange == nil {
                     zoomStartRange = state.visibleRange
                 }

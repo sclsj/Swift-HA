@@ -61,6 +61,61 @@ final class ChartGeometryScaleTests: XCTestCase {
         XCTAssertEqual(domain.lowerBound, 0)
         XCTAssertEqual(domain.upperBound, 1)
     }
+
+    func testFixedYAxisCanExpandWhenFitYDataIsEnabled() {
+        let series = [
+            makeLineSeries(points: [
+                LinePoint(x: 0, y: 5),
+                LinePoint(x: 10, y: 20)
+            ])
+        ]
+
+        let fixed = AxisScale.lineYDomain(
+            in: series,
+            visibleRange: ChartVisibleRange(0, 10),
+            fixedMinimum: 10,
+            fixedMaximum: 15
+        )
+        let fit = AxisScale.lineYDomain(
+            in: series,
+            visibleRange: ChartVisibleRange(0, 10),
+            fixedMinimum: 10,
+            fixedMaximum: 15,
+            fitYData: true
+        )
+
+        XCTAssertEqual(fixed.lowerBound, 10, accuracy: 0.001)
+        XCTAssertEqual(fixed.upperBound, 15, accuracy: 0.001)
+        XCTAssertEqual(fit.lowerBound, 5, accuracy: 0.001)
+        XCTAssertEqual(fit.upperBound, 20, accuracy: 0.001)
+    }
+
+    func testLogarithmicYDomainIgnoresNonPositiveValues() {
+        let series = [
+            makeLineSeries(points: [
+                LinePoint(x: 0, y: -5),
+                LinePoint(x: 5, y: 0),
+                LinePoint(x: 10, y: 10),
+                LinePoint(x: 20, y: 100)
+            ])
+        ]
+
+        let domain = AxisScale.lineYDomain(
+            in: series,
+            visibleRange: ChartVisibleRange(0, 20),
+            scaleKind: .logarithmic
+        )
+        let scale = AxisScale.yScale(
+            domain: domain,
+            plotRect: CGRect(x: 0, y: 0, width: 100, height: 100),
+            kind: .logarithmic
+        )
+
+        XCTAssertGreaterThan(domain.lowerBound, 0)
+        XCTAssertNil(scale.pixelIfValid(for: 0))
+        XCTAssertNotNil(scale.pixelIfValid(for: 10))
+        XCTAssertEqual(scale.value(for: scale.pixel(for: 100)), 100, accuracy: 0.001)
+    }
 }
 
 final class LineChartPreparationTests: XCTestCase {
@@ -126,6 +181,65 @@ final class LineChartPreparationTests: XCTestCase {
         XCTAssertEqual(points.map(\.timestamp), [0, 10, 10, 20])
         XCTAssertEqual(points.map(\.value), [1, 1, 2, 2])
         XCTAssertTrue(points.allSatisfy { chart.visibleRange.contains($0.timestamp) })
+    }
+
+    func testDownsampledVisibleWindowKeepsStepBoundaryPoints() {
+        let chart = LineChartRenderer.prepare(
+            series: [
+                makeLineSeries(points: [
+                    LinePoint(x: 0, y: 12),
+                    LinePoint(x: 100, y: 12)
+                ])
+            ],
+            visibleRange: ChartVisibleRange(40, 60),
+            size: defaultChartSize,
+            maximumDetail: 1
+        )
+        let points = chart.series[0].segments[0].points
+
+        XCTAssertEqual(points.map(\.timestamp), [40, 60])
+        XCTAssertEqual(points.map(\.value), [12, 12])
+    }
+
+    func testDownsampledVisibleWindowPreservesNullBreaks() {
+        let chart = LineChartRenderer.prepare(
+            series: [
+                makeLineSeries(points: [
+                    LinePoint(x: 0, y: 1),
+                    LinePoint(x: 50, y: 1),
+                    LinePoint(x: 51, y: nil),
+                    LinePoint(x: 100, y: 2)
+                ])
+            ],
+            visibleRange: ChartVisibleRange(40, 60),
+            size: defaultChartSize,
+            maximumDetail: 1
+        )
+
+        XCTAssertEqual(chart.series[0].segments.count, 1)
+        XCTAssertEqual(chart.series[0].segments[0].points.map(\.timestamp), [40, 50])
+        XCTAssertEqual(chart.series[0].segments[0].points.map(\.value), [1, 1])
+    }
+
+    func testLogarithmicPreparationSkipsNonPositivePoints() {
+        let chart = LineChartRenderer.prepare(
+            series: [
+                makeLineSeries(points: [
+                    LinePoint(x: 0, y: -5),
+                    LinePoint(x: 5, y: 0),
+                    LinePoint(x: 10, y: 10),
+                    LinePoint(x: 20, y: 100)
+                ])
+            ],
+            visibleRange: ChartVisibleRange(0, 20),
+            size: defaultChartSize,
+            logarithmicScale: true
+        )
+        let values = chart.series[0].segments.flatMap(\.points).map(\.value)
+
+        XCTAssertFalse(values.isEmpty)
+        XCTAssertTrue(values.allSatisfy { $0 > 0 })
+        XCTAssertNil(LineChartRenderer.nearestTooltip(in: chart, timestamp: 5)?.item)
     }
 
     func testStatisticsSourceMetadataSurvivesRenderPreparation() {
@@ -255,6 +369,18 @@ final class TimelineChartPreparationTests: XCTestCase {
 
         XCTAssertEqual(chart.drawableSegmentCount, 1)
         XCTAssertGreaterThanOrEqual(chart.rows[0].segments[0].rect.width, 0)
+    }
+
+    func testZeroDurationTimelineIntervalAtUpperBoundRemainsVisible() {
+        let chart = prepareTimelineChart(rows: [
+            TimelineRow(entityID: "binary_sensor.motion", name: "Motion", segments: [
+                TimelineSegment(start: 100, end: 100, state: "on", stateLocalized: "Detected", colorHex: "#fdd663")
+            ])
+        ])
+        let rect = chart.rows[0].segments[0].rect
+
+        XCTAssertGreaterThanOrEqual(rect.width, 1)
+        XCTAssertLessThanOrEqual(rect.maxX, chart.geometry.plotRect.maxX)
     }
 
     func testTimelineDeterministicColorAssignmentIsPreserved() {
@@ -397,6 +523,28 @@ final class ChartInteractionTests: XCTestCase {
         XCTAssertEqual(state.visibleRange.upperBound, 150, accuracy: 0.001)
         XCTAssertEqual(state.percentageRange.start, 25, accuracy: 0.001)
         XCTAssertEqual(state.percentageRange.end, 75, accuracy: 0.001)
+    }
+
+    func testReplacingDataBoundsTracksUnzoomedWindow() {
+        let state = ChartInteractionState(dataBounds: ChartVisibleRange(0, 100))
+
+        let updated = state.replacingDataBounds(ChartVisibleRange(10, 110))
+
+        XCTAssertEqual(updated.dataBounds, ChartVisibleRange(10, 110))
+        XCTAssertEqual(updated.visibleRange, ChartVisibleRange(10, 110))
+    }
+
+    func testReplacingDataBoundsClampsZoomedWindow() {
+        var state = ChartInteractionState(
+            dataBounds: ChartVisibleRange(0, 100),
+            visibleRange: ChartVisibleRange(40, 80)
+        )
+        state.pan(pixelDelta: -40, plotWidth: 200)
+
+        let updated = state.replacingDataBounds(ChartVisibleRange(0, 70))
+
+        XCTAssertEqual(updated.visibleRange.lowerBound, 30, accuracy: 0.001)
+        XCTAssertEqual(updated.visibleRange.upperBound, 70, accuracy: 0.001)
     }
 }
 

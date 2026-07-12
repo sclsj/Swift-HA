@@ -1,6 +1,24 @@
 import CoreGraphics
 import Foundation
 
+struct ChartInteractionTap: Equatable {
+    static let movementThreshold: CGFloat = 6
+    static let doubleTapInterval: TimeInterval = 0.3
+    static let doubleTapDistance: CGFloat = 24
+
+    var time: Date
+    var location: CGPoint
+
+    static func isTapMovement(_ translation: CGSize) -> Bool {
+        hypot(translation.width, translation.height) <= movementThreshold
+    }
+
+    func isDoubleTap(with next: ChartInteractionTap) -> Bool {
+        next.time.timeIntervalSince(time) <= Self.doubleTapInterval &&
+            hypot(next.location.x - location.x, next.location.y - location.y) <= Self.doubleTapDistance
+    }
+}
+
 struct ChartInteractionState: Equatable {
     var dataBounds: ChartVisibleRange
     var visibleRange: ChartVisibleRange
@@ -34,6 +52,14 @@ struct ChartInteractionState: Equatable {
             min(max(start, 0), 100),
             min(max(end, 0), 100)
         )
+    }
+
+    func replacingDataBounds(_ newDataBounds: ChartVisibleRange) -> ChartInteractionState {
+        var next = self
+        let wasZoomed = isZoomed
+        next.dataBounds = newDataBounds
+        next.visibleRange = wasZoomed ? visibleRange.clamped(to: newDataBounds) : newDataBounds
+        return next
     }
 
     mutating func setPercentageRange(start: Double, end: Double) {
